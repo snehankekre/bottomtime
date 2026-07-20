@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bottomtime"
-version = "0.1.0"
+version = "0.2.0"
 description = "Lossless dive-log store: ingest, decode, and reconcile dives from Garmin (FIT) and Shearwater (Petrel Native Format) dive computers"
 readme = "README.md"
 license = "MIT"
@@ -21,6 +21,7 @@ classifiers = [
 dependencies = ["garmin-fit-sdk>=21.0"]
 
 [project.optional-dependencies]
+plot = ["matplotlib>=3.5"]
 dev = ["pytest"]
 
 [project.scripts]

@@ -16,7 +16,7 @@ bottomtime keeps everything:
   types are preserved raw, per sample and per message.
 - **Decodes Shearwater's Petrel Native Format** directly from a Shearwater
   Cloud database (`dive_data.db`, the "Export Database" output) with a pure
-  Python decoder — including per-sample **GF99, deco ceiling, CNS and battery
+  Python decoder, including per-sample **GF99, deco ceiling, CNS and battery
   voltage** that Shearwater's own XML/CSV exports omit. Unknown record types
   are preserved raw.
 - **Archives every source file verbatim**, content-addressed by SHA-256. The
@@ -60,6 +60,47 @@ bottomtime verify --xml-dir ~/dives/shearwater-xml
 bottomtime status
 ```
 
+## Looking at your dives
+
+Once the store is built, interrogate it from the CLI:
+
+```sh
+bottomtime list                 # canonical dive table (--all includes test dives)
+bottomtime show 291             # one dive: computers, channels, gases, match quality
+bottomtime export 291 -o d.csv  # per-source sample series (also --format json)
+bottomtime plot 291 -o d.png    # aligned dual-computer profile + GF99/ppO2 panels
+```
+
+`plot` needs matplotlib: `pip install 'bottomtime[plot]'`. Alignment uses the
+matcher's clock offset and residual skew, so both computers' profiles sit on
+one time axis without resampling either.
+
+Or from Python:
+
+```python
+import bottomtime
+import pandas as pd
+
+for d in bottomtime.list_dives("data/dives.db"):
+    print(d["dive_number"], d["start_time_utc"], d["max_depth_m"], d["sources"])
+
+dive = bottomtime.load_dive("data/dives.db", 291)
+sw = pd.DataFrame(dive["sources"]["shearwater"]["samples"])
+sw.plot(x="t_s", y=["depth_m", "ceiling_m"])
+```
+
+`load_dive` returns everything about one dive: per-source samples
+(column-oriented, ready for DataFrames), gases, events, the verbatim decoded
+headers, computer model/firmware/serial, and the match metadata.
+
+And it's just SQLite; the views cover the common queries directly:
+
+```sh
+sqlite3 data/dives.db "SELECT dive_number, max_depth_m FROM v_dive_summary
+                       WHERE is_test=0 ORDER BY max_depth_m DESC LIMIT 10"
+datasette data/dives.db   # instant web UI + JSON API, if you have datasette
+```
+
 All commands are idempotent: re-running an ingest skips already-stored dives,
 so syncing after a dive trip only adds what's new.
 
@@ -80,8 +121,16 @@ documented fields and adds empirically verified mappings for GF99 (byte 25),
 deco ceiling (byte 24), battery voltage (byte 18) and @+5 TTS (bytes 26-27),
 validated against Shearwater Cloud's displayed values across hundreds of
 dives. Bytes without a known meaning are preserved per sample. If your dives
-disagree, `bottomtime verify` will say so loudly — issue reports with a
+disagree, `bottomtime verify` will say so loudly; issue reports with a
 failing blob are very welcome.
+
+PNF is shared across the Predator/Petrel firmware family. The empirical
+mappings above have so far been validated on **Perdix 2** and **Petrel 3**
+logs (the latter integrated with a Choptima CCR). Other models, and
+standalone vs. CCR-integrated units, may populate fields differently;
+unknown bytes are always preserved, and `bottomtime verify` cross-checks
+every decoded value, so drift on other hardware is detected rather than
+silently mis-decoded.
 
 ## License
 

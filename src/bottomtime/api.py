@@ -11,7 +11,45 @@ import json
 import sqlite3
 from pathlib import Path
 
+from .decode.pnf import COMPUTER_MODELS
+
 _SAMPLE_TABLES = {"garmin": "garmin_samples", "shearwater": "shearwater_samples"}
+
+
+def computer_info(source: str, header: dict) -> dict:
+    """Model / firmware / serial of the computer that produced a source log,
+    extracted from its verbatim header."""
+    if source == "garmin":
+        file_id = (header.get("file_id_mesgs") or [{}])[0]
+        product = file_id.get("garmin_product") or file_id.get("product_name")
+        model = str(product).replace("_", " ").title() if product else None
+        firmware = next(
+            (
+                d.get("software_version")
+                for d in header.get("device_info_mesgs") or []
+                if d.get("software_version")
+            ),
+            None,
+        )
+        serial = file_id.get("serial_number")
+        return {"model": model, "firmware": firmware, "serial": serial}
+
+    pnf_header = header.get("pnf") or {}
+    model_id = pnf_header.get("computer_model")
+    model = (
+        COMPUTER_MODELS.get(model_id, f"model {model_id}")
+        if model_id is not None
+        else None
+    )
+    firmware = pnf_header.get("computer_firmware")
+    serial = (header.get("dive_details") or {}).get("SerialNumber")
+    if not serial and pnf_header.get("computer_serial") is not None:
+        serial = f"{pnf_header['computer_serial']:08X}"
+    return {
+        "model": model,
+        "firmware": f"v{firmware}" if firmware is not None else None,
+        "serial": serial,
+    }
 
 
 def _columns_of(con: sqlite3.Connection, table: str) -> list[str]:
@@ -45,6 +83,7 @@ def load_dive(db_path: str | Path, dive_number: int) -> dict:
                 (sd["id"],),
             ).fetchall()
             samples = {c: [r[i] for r in rows] for i, c in enumerate(cols)}
+            header = json.loads(sd["header_json"])
             entry = {
                 "source_dive_id": sd["id"],
                 "source_key": sd["source_key"],
@@ -52,9 +91,28 @@ def load_dive(db_path: str | Path, dive_number: int) -> dict:
                 "start_time_local": sd["start_time_local"],
                 "duration_s": sd["duration_s"],
                 "max_depth_m": sd["max_depth_m"],
+                "sample_interval_ms": sd["sample_interval_ms"],
                 "mode": sd["mode"],
-                "header": json.loads(sd["header_json"]),
+                "computer": computer_info(sd["source"], header),
+                "header": header,
                 "samples": samples,
+                "gases": [
+                    {k: g[k] for k in g.keys()}
+                    for g in con.execute(
+                        "SELECT gas_index, o2_pct, he_pct, circuit, enabled, used"
+                        " FROM gases WHERE source_dive_id=? ORDER BY gas_index",
+                        (sd["id"],),
+                    )
+                ],
+                "events": [
+                    {"t_s": e["t_s"], "kind": e["kind"],
+                     "payload": json.loads(e["payload_json"])}
+                    for e in con.execute(
+                        "SELECT t_s, kind, payload_json FROM events"
+                        " WHERE source_dive_id=? ORDER BY t_s",
+                        (sd["id"],),
+                    )
+                ],
             }
             key = sd["source"]
             if key in out["sources"]:  # several logs from one source (splits)
@@ -65,6 +123,18 @@ def load_dive(db_path: str | Path, dive_number: int) -> dict:
                     out["sources"][key] = [existing, entry]
             else:
                 out["sources"][key] = entry
+        out["matches"] = [
+            {k: m[k] for k in m.keys()}
+            for m in con.execute(
+                "SELECT m.garmin_source_dive_id, m.shearwater_source_dive_id,"
+                " m.clock_offset_s, m.residual_skew_s, m.xcorr_score,"
+                " m.duration_delta_s, m.max_depth_delta_m, m.method, m.status"
+                " FROM matches m JOIN dive_members dm"
+                " ON dm.source_dive_id = m.garmin_source_dive_id"
+                " WHERE dm.dive_id=? AND m.status IN ('auto','confirmed')",
+                (dive["id"],),
+            )
+        ]
         return out
     finally:
         con.close()

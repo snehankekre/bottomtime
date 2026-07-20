@@ -1,6 +1,6 @@
 """bottomtime: lossless dive-log store for multi-computer divers."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .api import list_dives, load_dive
 

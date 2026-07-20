@@ -14,7 +14,7 @@ fields sit at legacy-offset + 1 (the PNF type byte), opening/closing record
 fields at the absolute offsets used for their legacy 128-byte block.
 
 Record types this decoder does not understand are returned raw in
-`PnfDive.unknown_records` — nothing is dropped.
+`PnfDive.unknown_records`; nothing is dropped.
 
 DECODER_VERSION history:
   1  initial port of the libdivecomputer field set
@@ -64,6 +64,23 @@ DIVE_MODES = {
 }
 
 DECO_MODELS = {0: "gf", 1: "vpmb", 2: "vpmb_gfs", 3: "dciem"}
+
+# Final-record byte 13 model ids, names per libdivecomputer's descriptors.
+# The PNF layout is shared across the family; bottomtime's field mappings are
+# validated so far on Petrel 3 (10) and Perdix 2 (11) logs.
+COMPUTER_MODELS = {
+    2: "Predator",
+    3: "Petrel",
+    4: "Nerd",
+    5: "Perdix",
+    6: "Perdix AI",
+    7: "Nerd 2",
+    8: "Teric",
+    9: "Peregrine",
+    10: "Petrel 3",
+    11: "Perdix 2",
+    12: "Tern",
+}
 
 # Sample bytes not (yet) assigned a meaning; kept per sample as b<offset>.
 # 18 (battery), 24 (ceiling), 25 (gf99), 26-27 (@+5) were identified

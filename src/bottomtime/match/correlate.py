@@ -52,7 +52,7 @@ def median_abs_delta(
     lag_s: float = 0.0,
 ) -> float | None:
     """Median |depth difference| over the overlapping window, with series_b
-    shifted by lag_s. Robust where NCC is unstable (low-variance pool
+    shifted by lag_s. Stable where NCC is unstable (low-variance pool
     profiles): two computers on the same body must agree on depth."""
     if not series_a or not series_b:
         return None
