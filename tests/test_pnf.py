@@ -1,0 +1,148 @@
+"""PNF decoder tests against a synthetic blob built record by record."""
+
+import gzip
+import struct
+
+import pytest
+
+from bottomtime.decode import pnf
+
+
+def _record(rtype: int, payload: dict[int, bytes] | None = None) -> bytearray:
+    rec = bytearray(32)
+    rec[0] = rtype
+    for offset, data in (payload or {}).items():
+        rec[offset : offset + len(data)] = data
+    return rec
+
+
+def _sample(depth_dm: int, **kw) -> bytearray:
+    rec = _record(pnf.DIVE_SAMPLE)
+    struct.pack_into(">H", rec, 1, depth_dm)
+    struct.pack_into(">H", rec, 3, kw.get("stop_m", 0))
+    struct.pack_into(">H", rec, 5, kw.get("tts_min", 0))
+    rec[7] = kw.get("ppo2_raw", 21)
+    rec[8] = kw.get("o2", 21)
+    rec[9] = kw.get("he", 0)
+    rec[10] = kw.get("ndl_min", 99)
+    rec[12] = kw.get("flags", pnf.FLAG_OC)
+    rec[14] = kw.get("temp", 27) & 0xFF
+    rec[18] = kw.get("battery_raw", 152)
+    struct.pack_into(">H", rec, 20, 0xFFFF)  # AI off
+    rec[22] = 0xFF  # gas time not paired
+    rec[23] = kw.get("cns", 0)
+    rec[24] = kw.get("ceiling", 0xFF)
+    rec[25] = kw.get("gf99", 0xFF)
+    struct.pack_into(">H", rec, 26, kw.get("at_plus_five", 0))
+    struct.pack_into(">H", rec, 28, 0xFFFF)  # AI off
+    return rec
+
+
+def build_blob(samples=None, interval_ms=10000, extra_records=None) -> bytes:
+    records = []
+
+    opening0 = _record(0x10)
+    opening0[4], opening0[5] = 40, 80  # GF low/high
+    opening0[8] = 0  # metric
+    opening0[20] = 21  # gas 0 O2
+    opening0[21] = 50  # gas 1 O2
+    records.append(opening0)
+
+    opening1 = _record(0x11)
+    struct.pack_into(">H", opening1, 16, 1013)  # atmospheric mbar
+    records.append(opening1)
+
+    opening2 = _record(0x12)
+    opening2[18] = 0  # GF deco model
+    records.append(opening2)
+
+    opening3 = _record(0x13)
+    struct.pack_into(">H", opening3, 3, 1020)  # density
+    records.append(opening3)
+
+    opening4 = _record(0x14)
+    opening4[1] = 1  # OC tec
+    opening4[16] = 13  # log version
+    struct.pack_into(">H", opening4, 17, 0b11)  # gases 0,1 enabled
+    records.append(opening4)
+
+    opening5 = _record(0x15)
+    struct.pack_into(">H", opening5, 23, interval_ms)
+    records.append(opening5)
+
+    records.extend(samples or [])
+    records.extend(extra_records or [])
+
+    for i in range(5):
+        rec = _record(0x20 + i)
+        if i == 0:
+            struct.pack_into(">H", rec, 4, 528)  # max depth dm
+            rec[6:9] = (3374).to_bytes(3, "big")
+        records.append(rec)
+
+    final = _record(0xFF)
+    struct.pack_into(">I", final, 2, 0xA823C228)
+    final[13] = 11
+    records.append(final)
+
+    raw = b"".join(bytes(r) for r in records)
+    return struct.pack("<I", len(raw)) + gzip.compress(raw)
+
+
+def test_header():
+    dive = pnf.decode(build_blob(samples=[_sample(24)]))
+    h = dive.header
+    assert (h["gf_low"], h["gf_high"]) == (40, 80)
+    assert h["deco_model"] == "gf"
+    assert h["atmospheric_mbar"] == 1013
+    assert h["water_density"] == 1020
+    assert h["divemode"] == "oc_tec"
+    assert h["max_depth_m"] == 52.8
+    assert h["divetime_s"] == 3374
+    assert h["computer_serial"] == 0xA823C228
+    assert h["sample_interval_ms"] == 10000
+    assert [g for g in dive.gases if g.enabled and g.o2_pct] == dive.gases[:2]
+
+
+def test_samples():
+    dive = pnf.decode(
+        build_blob(
+            samples=[
+                _sample(24, ndl_min=99),
+                _sample(528, stop_m=9, tts_min=14, cns=4, ceiling=9, gf99=30, o2=21),
+            ]
+        )
+    )
+    assert len(dive.samples) == 2
+    s0, s1 = dive.samples
+    assert (s0.t_s, s1.t_s) == (0.0, 10.0)
+    assert s0.depth_m == 2.4
+    assert s0.gf99 is None and s0.ceiling_m is None  # 0xFF sentinel
+    assert s0.battery_v == 1.52
+    assert s0.tank0_psi is None and s0.gas_time_min is None
+    assert s1.depth_m == 52.8
+    assert (s1.stop_depth_m, s1.tts_min, s1.in_deco) == (9.0, 14.0, 1)
+    assert (s1.ceiling_m, s1.gf99, s1.cns_pct) == (9.0, 30.0, 4.0)
+
+
+def test_unknown_records_preserved():
+    mystery = _record(0x51, {1: b"\xde\xad\xbe\xef"})
+    dive = pnf.decode(build_blob(samples=[_sample(24)], extra_records=[mystery]))
+    assert len(dive.unknown_records) == 1
+    type_key, _seq, raw = dive.unknown_records[0]
+    assert type_key == "0x51"
+    assert raw == bytes(mystery)
+
+
+def test_length_prefix_validated():
+    blob = build_blob(samples=[_sample(24)])
+    corrupted = struct.pack("<I", 999999) + blob[4:]
+    with pytest.raises(ValueError, match="length mismatch"):
+        pnf.decode(corrupted)
+
+
+def test_imperial_units():
+    samples = [_sample(100)]  # 10.0 units
+    blob = build_blob(samples=samples)
+    dive = pnf.decode(blob)
+    assert dive.samples[0].depth_m == 10.0  # metric build
