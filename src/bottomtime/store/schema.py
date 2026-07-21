@@ -11,7 +11,7 @@ Design principles:
   dives is the canonical entity built from matches + singletons.
 """
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 DDL = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -89,8 +89,11 @@ CREATE TABLE IF NOT EXISTS shearwater_samples (
   he_pct REAL,
   setpoint REAL,
   cns_pct REAL,
-  gf99 REAL,                       -- populated at decoder_version >= 2
-  ceiling_m REAL,                  -- populated at decoder_version >= 2
+  gf99 REAL,                       -- populated at decoder_version >= 2; NULL under DCIEM
+  ceiling_m REAL,                  -- populated at decoder_version >= 2; NULL under DCIEM
+  safe_ascent_depth_m REAL,        -- DCIEM only (bytes 24-25); NULL otherwise, v3
+  battery_pct INTEGER,             -- battery percent remaining (byte 11), v3
+  sac REAL,                        -- surface air consumption (bytes 30-31), v3
   sensor1_raw INTEGER,
   sensor2_raw INTEGER,
   sensor3_raw INTEGER,
@@ -98,7 +101,8 @@ CREATE TABLE IF NOT EXISTS shearwater_samples (
   sensor2_ppo2 REAL,
   sensor3_ppo2 REAL,
   battery_v REAL,
-  status_flags INTEGER,
+  status_flags INTEGER,             -- raw sample byte 12 (packed mode/status bits)
+  solenoid_fired_count INTEGER,     -- CCR O2 solenoid firings, byte 12 bits 6-7, v3
   tank0_psi REAL,
   tank1_psi REAL,
   gas_time_min REAL,

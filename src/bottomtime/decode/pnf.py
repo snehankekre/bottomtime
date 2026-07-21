@@ -23,6 +23,18 @@ DECODER_VERSION history:
      dive_details.EndGF99 and decays during surface offgassing; byte 24 sits
      just below the 3 m-quantized stop depth and zeroes when deco clears;
      byte 18 equals the XML export's batteryVoltage x 100
+  3  reconciled against Shearwater Cloud's own parser (DiveLogParser.dll,
+     class PetrelNativeLogV14Parser, read from the desktop app). Every sample
+     byte 0-31 is now named. Changes vs v2:
+     - bytes 24/25 are ceiling/gf99 only under gradient-factor deco models;
+       under DCIEM (deco model 3) they are a safe-ascent depth instead
+       (byte 24 integer metres, byte 25 hundredths), decoded to
+       safe_ascent_depth_m with ceiling_m/gf99 left None.
+     - battery_v is a 16-bit value: (byte 17 << 8 | byte 18) / 100, not byte 18
+       alone (byte 17 is zero only because a ~1.5 V cell never needs it; a
+       higher-voltage computer such as a Teric would overflow the old read).
+     - byte 11 is battery_pct (BATTERY_PERCENT_REMAINING).
+     - bytes 30-31 are sac (surface air consumption, u16 / 100; 0xFFFF = n/a).
 """
 
 from __future__ import annotations
@@ -31,7 +43,7 @@ import gzip
 import struct
 from dataclasses import dataclass, field
 
-DECODER_VERSION = 2
+DECODER_VERSION = 3
 
 RECORD_SIZE = 32
 
@@ -44,12 +56,17 @@ INFO_EVENT = 0x30
 DIVE_SAMPLE_EXT = 0xE1
 FINAL = 0xFF
 
-# status flag bits (sample byte 12)
+# Sample byte 12 is a packed status/mode byte. Bit meanings per Shearwater's
+# PetrelNativeLogV14Parser: 0 gas-switch-needed, 1 external ppO2, 2 setpoint
+# type (high/low), 3 circuit-switch type, 4 circuit mode (set = OC on this
+# family), 5 CCR mode, 6-7 solenoid-fired count.
 FLAG_GASSWITCH = 0x01
 FLAG_PPO2_EXTERNAL = 0x02
 FLAG_SETPOINT_HIGH = 0x04
 FLAG_SC = 0x08
 FLAG_OC = 0x10
+FLAG_CCR_MODE = 0x20
+SOLENOID_COUNT_SHIFT = 6
 
 DIVE_MODES = {
     0: "cc",
@@ -82,10 +99,9 @@ COMPUTER_MODELS = {
     12: "Tern",
 }
 
-# Sample bytes not (yet) assigned a meaning; kept per sample as b<offset>.
-# 18 (battery), 24 (ceiling), 25 (gf99), 26-27 (@+5) were identified
-# empirically and promoted in v2. 30-31 read 0xFFFF (sentinel) so far.
-UNMAPPED_SAMPLE_BYTES = (11, 17, 30, 31)
+# As of v3 every sample byte 0-31 is named (reconciled against Shearwater's
+# own PetrelNativeLogV14Parser), so no bytes are stashed raw in extra_json.
+SAC_SENTINEL = 0xFFFF  # bytes 30-31 when no air integration / no SAC
 
 
 def _u16be(data: bytes, off: int) -> int:
@@ -127,6 +143,9 @@ class PnfSample:
     cns_pct: float | None = None
     gf99: float | None = None
     ceiling_m: float | None = None
+    safe_ascent_depth_m: float | None = None  # DCIEM only (bytes 24-25)
+    battery_pct: int | None = None
+    sac: float | None = None
     sensor1_raw: int | None = None
     sensor2_raw: int | None = None
     sensor3_raw: int | None = None
@@ -135,6 +154,13 @@ class PnfSample:
     sensor3_ppo2: float | None = None
     battery_v: float | None = None
     status_flags: int | None = None
+    gas_switch_needed: bool | None = None
+    ppo2_external: bool | None = None
+    setpoint_high: bool | None = None
+    circuit_switch: bool | None = None
+    circuit_mode: int | None = None
+    ccr_mode: int | None = None
+    solenoid_fired_count: int | None = None
     tank0_psi: float | None = None
     tank1_psi: float | None = None
     gas_time_min: float | None = None
@@ -230,11 +256,15 @@ def decode(blob: bytes) -> PnfDive:
     seq = 0
     t = 0.0
 
+    is_dciem = header["deco_model"] == "dciem"
+
     for rtype, off in raw_records:
         rec = data[off : off + RECORD_SIZE]
         if rtype in (DIVE_SAMPLE, AVELO_SAMPLE):
             samples.append(
-                _parse_sample(rec, t, imperial, calibrated, calibration, rtype)
+                _parse_sample(
+                    rec, t, imperial, calibrated, calibration, rtype, is_dciem
+                )
             )
             t += interval_ms / 1000.0
         elif rtype == FREEDIVE_SAMPLE:
@@ -295,6 +325,7 @@ def _parse_sample(
     calibrated: int,
     calibration: list[float],
     rtype: int,
+    is_dciem: bool,
 ) -> PnfSample:
     ft = 0.3048
     depth = _u16be(rec, 1) / 10.0
@@ -311,6 +342,7 @@ def _parse_sample(
 
     status = rec[12] if rtype != AVELO_SAMPLE else 0
     ccr = (status & FLAG_OC) == 0 if rtype != AVELO_SAMPLE else False
+    decoded_status = rtype != AVELO_SAMPLE
 
     sample = PnfSample(
         t_s=t,
@@ -328,10 +360,33 @@ def _parse_sample(
         sensor2_raw=rec[15],
         sensor3_raw=rec[16],
         cns_pct=float(rec[23]),
-        ceiling_m=float(rec[24]) if rec[24] != 0xFF else None,
-        gf99=float(rec[25]) if rec[25] != 0xFF else None,  # 0xFF = not available
-        battery_v=rec[18] / 100.0,
+        battery_pct=rec[11],
+        battery_v=((rec[17] << 8) | rec[18]) / 100.0,
     )
+
+    if decoded_status:
+        sample.gas_switch_needed = bool(status & FLAG_GASSWITCH)
+        sample.ppo2_external = bool(status & FLAG_PPO2_EXTERNAL)
+        sample.setpoint_high = bool(status & FLAG_SETPOINT_HIGH)
+        sample.circuit_switch = bool(status & FLAG_SC)
+        sample.circuit_mode = (status >> 4) & 1
+        sample.ccr_mode = (status >> 5) & 1
+        sample.solenoid_fired_count = (status >> SOLENOID_COUNT_SHIFT) & 3
+
+    # Bytes 24-25 are ceiling + GF99 under gradient-factor deco models. Under
+    # DCIEM (deco model 3) the same two bytes are a safe-ascent depth: byte 24
+    # whole metres, byte 25 hundredths, subtracted.
+    if is_dciem:
+        sample.safe_ascent_depth_m = rec[24] - rec[25] / 100.0
+    else:
+        if rec[24] != 0xFF:
+            sample.ceiling_m = float(rec[24])
+        if rec[25] != 0xFF:  # 0xFF = not available (still on-gassing)
+            sample.gf99 = float(rec[25])
+
+    sac_raw = _u16be(rec, 30)
+    if sac_raw != SAC_SENTINEL:
+        sample.sac = sac_raw / 100.0
 
     if ccr:
         sample.setpoint = rec[19] / 100.0
@@ -362,10 +417,6 @@ def _parse_sample(
     at_plus_five = _u16be(rec, 26)
     if at_plus_five != 0xFFFF:
         sample.extra["at_plus_five_min"] = at_plus_five
-
-    for b in UNMAPPED_SAMPLE_BYTES:
-        if rec[b]:
-            sample.extra[f"b{b}"] = rec[b]
 
     return sample
 

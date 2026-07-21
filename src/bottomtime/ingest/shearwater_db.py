@@ -139,19 +139,22 @@ def _ingest_log(
     con.executemany(
         "INSERT INTO shearwater_samples (source_dive_id, t_s, depth_m, temp_c,"
         " stop_depth_m, stop_or_ndl_min, tts_min, in_deco, avg_ppo2, o2_pct, he_pct,"
-        " setpoint, cns_pct, gf99, ceiling_m, sensor1_raw, sensor2_raw, sensor3_raw,"
+        " setpoint, cns_pct, gf99, ceiling_m, safe_ascent_depth_m, battery_pct, sac,"
+        " sensor1_raw, sensor2_raw, sensor3_raw,"
         " sensor1_ppo2, sensor2_ppo2, sensor3_ppo2, battery_v, status_flags,"
-        " tank0_psi, tank1_psi, gas_time_min, extra_json)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " solenoid_fired_count, tank0_psi, tank1_psi, gas_time_min, extra_json)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         [
             (
                 dive_id, s.t_s, s.depth_m, s.temp_c,
                 s.stop_depth_m, s.stop_or_ndl_min, s.tts_min, s.in_deco,
                 s.avg_ppo2, s.o2_pct, s.he_pct,
                 s.setpoint, s.cns_pct, s.gf99, s.ceiling_m,
+                s.safe_ascent_depth_m, s.battery_pct, s.sac,
                 s.sensor1_raw, s.sensor2_raw, s.sensor3_raw,
                 s.sensor1_ppo2, s.sensor2_ppo2, s.sensor3_ppo2,
                 s.battery_v, s.status_flags,
+                s.solenoid_fired_count,
                 s.tank0_psi, s.tank1_psi, s.gas_time_min,
                 json.dumps(s.extra, separators=(",", ":")) if s.extra else None,
             )

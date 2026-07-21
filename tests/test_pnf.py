@@ -25,8 +25,10 @@ def _sample(depth_dm: int, **kw) -> bytearray:
     rec[8] = kw.get("o2", 21)
     rec[9] = kw.get("he", 0)
     rec[10] = kw.get("ndl_min", 99)
+    rec[11] = kw.get("battery_pct", 100)
     rec[12] = kw.get("flags", pnf.FLAG_OC)
     rec[14] = kw.get("temp", 27) & 0xFF
+    rec[17] = kw.get("battery_msb", 0)
     rec[18] = kw.get("battery_raw", 152)
     struct.pack_into(">H", rec, 20, 0xFFFF)  # AI off
     rec[22] = 0xFF  # gas time not paired
@@ -35,10 +37,11 @@ def _sample(depth_dm: int, **kw) -> bytearray:
     rec[25] = kw.get("gf99", 0xFF)
     struct.pack_into(">H", rec, 26, kw.get("at_plus_five", 0))
     struct.pack_into(">H", rec, 28, 0xFFFF)  # AI off
+    struct.pack_into(">H", rec, 30, kw.get("sac_raw", 0xFFFF))  # SAC n/a
     return rec
 
 
-def build_blob(samples=None, interval_ms=10000, extra_records=None) -> bytes:
+def build_blob(samples=None, interval_ms=10000, extra_records=None, deco_model=0) -> bytes:
     records = []
 
     opening0 = _record(0x10)
@@ -53,7 +56,7 @@ def build_blob(samples=None, interval_ms=10000, extra_records=None) -> bytes:
     records.append(opening1)
 
     opening2 = _record(0x12)
-    opening2[18] = 0  # GF deco model
+    opening2[18] = deco_model  # 0=GF, 1=VPM-B, 2=VPM-B/GFS, 3=DCIEM
     records.append(opening2)
 
     opening3 = _record(0x13)
@@ -123,6 +126,43 @@ def test_samples():
     assert s1.depth_m == 52.8
     assert (s1.stop_depth_m, s1.tts_min, s1.in_deco) == (9.0, 14.0, 1)
     assert (s1.ceiling_m, s1.gf99, s1.cns_pct) == (9.0, 30.0, 4.0)
+    assert s0.battery_pct == 100
+    assert s0.sac is None  # 0xFFFF sentinel
+
+
+def test_battery_voltage_is_16bit():
+    # A higher-voltage computer (e.g. Teric rechargeable ~4.2 V) overflows a
+    # single byte, so the decoder must read bytes 17-18 together.
+    dive = pnf.decode(build_blob(samples=[_sample(24, battery_msb=1, battery_raw=164)]))
+    assert dive.samples[0].battery_v == round((1 << 8 | 164) / 100.0, 2)  # 4.20 V
+
+
+def test_sac_when_present():
+    dive = pnf.decode(build_blob(samples=[_sample(24, sac_raw=1234)]))
+    assert dive.samples[0].sac == 12.34
+
+
+def test_status_byte_bits_decoded():
+    flags = 0x01 | 0x20 | (2 << 6)  # gas-switch-needed + CCR mode + solenoid count 2
+    dive = pnf.decode(build_blob(samples=[_sample(24, flags=flags)]))
+    s = dive.samples[0]
+    assert s.gas_switch_needed is True
+    assert s.ccr_mode == 1
+    assert s.solenoid_fired_count == 2
+    assert s.circuit_mode == 0
+    assert s.setpoint_high is False
+    assert s.status_flags == flags
+
+
+def test_dciem_uses_safe_ascent_depth():
+    # Under DCIEM (deco model 3), bytes 24-25 are a safe-ascent depth, not
+    # ceiling/GF99: byte 24 whole metres minus byte 25 hundredths.
+    blob = build_blob(samples=[_sample(300, ceiling=6, gf99=50)], deco_model=3)
+    dive = pnf.decode(blob)
+    assert dive.header["deco_model"] == "dciem"
+    s = dive.samples[0]
+    assert s.ceiling_m is None and s.gf99 is None
+    assert s.safe_ascent_depth_m == 6 - 0.50  # 5.5 m
 
 
 def test_unknown_records_preserved():

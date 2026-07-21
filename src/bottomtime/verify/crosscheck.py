@@ -30,6 +30,7 @@ TOL = {
     "temp_c": 0.51,
     "battery_v": 0.011,
     "ndl_min": 0.001,
+    "sac": 0.011,
 }
 
 
@@ -71,6 +72,10 @@ def check_xml(con: sqlite3.Connection, xml_dir: Path, failures: list) -> None:
             ("averagePPO2", "avg_ppo2", 1.0),
             ("waterTemp", "temp_c", 1.0),
             ("batteryVoltage", "battery_v", 1.0),
+            # SAC (bytes 30-31) only present with wireless air integration. The
+            # XML is produced by the same parser, so it should match exactly;
+            # inert on dives without AI (both sides None).
+            ("sac", "sac", 1.0),
         ]
         for i, (db_row, x) in enumerate(zip(samples, xs)):
             for xml_field, col, scale in pairs:
