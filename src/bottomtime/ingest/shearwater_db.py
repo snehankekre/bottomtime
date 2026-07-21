@@ -1,10 +1,10 @@
 """Ingest a Shearwater Cloud database (dive_data.db / 'Export Database').
 
 Each dive's complete native log lives in log_data.data_bytes_1 as an sw-pnf
-blob (decoded by bottomtime.decode.pnf); dive_details supplies the metadata
-layer (gas plan JSON, EndGF99, site/notes when present). The blob is stored
-verbatim in source_dives.raw_blob in addition to the archived .db, so every
-Shearwater byte is preserved twice over.
+blob (decoded by the pnf package); dive_details supplies the metadata layer
+(gas plan JSON, EndGF99, site/notes when present). The blob is stored verbatim
+in source_dives.raw_blob in addition to the archived .db, so every Shearwater
+byte is preserved twice over.
 """
 
 from __future__ import annotations
@@ -15,9 +15,17 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..decode import pnf
+import pnf
+
 from ..store.db import source_dive_exists
 from .archive import archive_file
+
+# Decode-contract version stamped on each Shearwater source dive so that an
+# archive-first re-decode can find dives produced by an older decode. Bump this
+# whenever a pnf upgrade changes decoded output. History: 1 libdivecomputer
+# field set, 2 empirical ceiling/gf99/battery/@+5, 3 pnf reconciliation
+# (DCIEM branch, 16-bit battery, battery %, SAC, status bits).
+DECODER_VERSION = 3
 
 
 def _details_row(con: sqlite3.Connection, dive_id: str) -> dict:
@@ -123,7 +131,7 @@ def _ingest_log(
             artifact_id,
             source_key,
             digest,
-            pnf.DECODER_VERSION,
+            DECODER_VERSION,
             start_local,
             dive.header.get("divetime_s"),
             dive.header.get("max_depth_m"),

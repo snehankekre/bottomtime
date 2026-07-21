@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bottomtime"
-version = "0.3.0"
+version = "0.4.0"
 description = "Lossless dive-log store: ingest, decode, and reconcile dives from Garmin (FIT) and Shearwater (Petrel Native Format) dive computers"
 readme = "README.md"
 license = "MIT"
@@ -18,7 +18,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Scientific/Engineering",
 ]
-dependencies = ["garmin-fit-sdk>=21.0"]
+dependencies = ["garmin-fit-sdk>=21.0", "pnf>=0.1.0"]
 
 [project.optional-dependencies]
 plot = ["matplotlib>=3.5"]
@@ -33,3 +33,8 @@ Issues = "https://github.com/snehankekre/bottomtime/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bottomtime"]
+
+[tool.hatch.build.targets.sdist]
+# Positive allowlist: the sdist ships only the package, its tests, and the
+# standard metadata files, so local tooling and CI config stay out of releases.
+include = ["/src", "/tests", "/README.md", "/LICENSE"]

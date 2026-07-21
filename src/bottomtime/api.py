@@ -11,7 +11,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from .decode.pnf import COMPUTER_MODELS
+from pnf import COMPUTER_MODELS
 
 _SAMPLE_TABLES = {"garmin": "garmin_samples", "shearwater": "shearwater_samples"}
 
