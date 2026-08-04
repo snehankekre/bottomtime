@@ -6,8 +6,23 @@ Tec divers often wear two dive computers (say, a Garmin Descent on one wrist
 and a Shearwater on the other). Each records the same dive differently: the
 Garmin logs at 1 Hz with heart rate, GPS, CNS and tissue loading; the
 Shearwater logs its native record with GF99, deco ceiling, ppO2 sensors and
-per-sample battery. No existing interchange format (UDDF, DL7, Subsurface)
-preserves the union, so exporting to any of them throws data away.
+per-sample battery.
+
+Converting to an interchange format throws most of that away, and the
+converters are responsible for more of the loss than the formats are. The
+specs are richer than their reputation. UDDF 3.2.3 has `<gradientfactor
+tissue="n">` per waypoint, plus `<batterychargecondition>`, `<cns>`,
+`<decostop>`, `<setpo2>` and `<measuredpo2>`; DAN's DL7 (2006) carries a
+per-sample `Current Ceiling` and a per-sample hex warning word; an unpublished
+UDDF 3.3.0 alpha, which real software emits, adds `<batteryvoltage>` and
+`<timetosurface>`. Of the 17 channels one 101 m dive here recorded, 16 are
+representable somewhere across those three.
+
+Almost none of it gets written. Subsurface's `xslt/uddf-export.xslt` emits
+seven element kinds, so four of those 17 channels survive a round trip through
+it, even though its own `struct sample` holds NDL, TTS, CNS, setpoint and ppO2
+sensors; its UDDF importer matches only five fields, so two of the seven it
+writes do not survive being read back.
 
 bottomtime keeps everything:
 
