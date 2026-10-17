@@ -13,10 +13,10 @@ GARMIN_HEADER = {
     "file_id_mesgs": [{"garmin_product": "descent_mk3", "serial_number": 12345}],
     "device_info_mesgs": [{"software_version": 25.21}],
 }
+# The shape pnf.decode() returns: the model is a name, the serial an integer.
 SHEARWATER_HEADER = {
-    "pnf": {"computer_model": 11, "computer_firmware": 100,
-            "computer_serial": 0xA823C228},
-    "dive_details": {"SerialNumber": "A823C228"},
+    "pnf": {"computer_model": "Perdix 2", "computer_model_id": 11,
+            "computer_firmware": 100, "computer_serial": 0xA823C228},
 }
 
 
@@ -33,7 +33,7 @@ def store(tmp_path):
             "INSERT INTO source_dives (id, source, artifact_id, source_key,"
             " content_hash, decoder_version, start_time_utc, start_time_local,"
             " utc_offset_min, duration_s, max_depth_m, sample_interval_ms, mode,"
-            " header_json) VALUES (1,'garmin',1,'act1','h1',1,"
+            " header_json) VALUES (1,'garmin',1,'act1','h1','garmin-fit-sdk 21',"
             " '2026-07-06 03:47:01','2026-07-06 11:47:01',480,120,20.0,1000,"
             " 'multi_gas_diving',?)",
             (json.dumps(GARMIN_HEADER),),
@@ -42,7 +42,7 @@ def store(tmp_path):
             "INSERT INTO source_dives (id, source, artifact_id, source_key,"
             " content_hash, decoder_version, start_time_utc, start_time_local,"
             " utc_offset_min, duration_s, max_depth_m, sample_interval_ms, mode,"
-            " header_json) VALUES (2,'shearwater',1,'A823C228#1','h2',2,"
+            " header_json) VALUES (2,'shearwater',1,'A823C228#1','h2','pnf 0.2.0',"
             " '2026-07-06 03:43:52','2026-07-06 11:43:52',480,110,20.2,10000,"
             " 'oc_tec',?)",
             (json.dumps(SHEARWATER_HEADER),),
@@ -127,7 +127,7 @@ def test_export_json(store, tmp_path, capsys):
     ) == 0
     data = json.loads(out_file.read_text())
     assert sorted(data["sources"]) == ["garmin", "shearwater"]
-    assert data["sources"]["garmin"]["samples"]["depth_m"] == [0.0, 0.5, 1.0, 1.5, 2.0]
+    assert data["sources"]["garmin"][0]["samples"]["depth_m"] == [0.0, 0.5, 1.0, 1.5, 2.0]
     assert data["matches"][0]["clock_offset_s"] == 28800
 
 
@@ -140,6 +140,15 @@ def test_export_csv_stdout(store, capsys):
     body = rows[1:]
     assert len(body) == 8  # 5 garmin + 3 shearwater, never merged
     assert {r[0] for r in body} == {"garmin", "shearwater"}
+
+
+def test_old_schema_asks_for_a_rebuild(store):
+    con = store_db.connect(store)
+    with con:
+        con.execute("UPDATE meta SET value='2' WHERE key='schema_version'")
+    con.close()
+    with pytest.raises(SystemExit, match="bottomtime rebuild"):
+        store_db.connect(store)
 
 
 def test_aligned_series_applies_clock_offset_and_skew(store):

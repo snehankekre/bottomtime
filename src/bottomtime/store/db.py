@@ -22,6 +22,13 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
         (str(SCHEMA_VERSION),),
     )
     con.commit()
+    found = con.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0]
+    if found != str(SCHEMA_VERSION):
+        con.close()
+        raise SystemExit(
+            f"{path} has schema v{found}; this bottomtime needs v{SCHEMA_VERSION}."
+            " Run `bottomtime rebuild` to rebuild it from the archive."
+        )
     return con
 
 

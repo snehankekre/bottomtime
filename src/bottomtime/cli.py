@@ -4,6 +4,7 @@
     bottomtime ingest garmin <fit-dir>
     bottomtime ingest shearwater <dive_data.db>
     bottomtime match
+    bottomtime rebuild
     bottomtime verify [--xml-dir DIR]
     bottomtime status
     bottomtime list [--all]
@@ -12,7 +13,8 @@
     bottomtime plot <dive-number> [-o FILE]
 
 All commands are idempotent: re-running an ingest skips anything already
-stored (content-hash keyed), match recomputes only 'auto' links.
+stored (content-hash keyed), match recomputes only 'auto' links. `rebuild`
+throws the database away and re-ingests every file in the archive.
 """
 
 from __future__ import annotations
@@ -50,12 +52,6 @@ def _fmt_offset(utc_offset_min) -> str:
     sign = "+" if utc_offset_min >= 0 else "-"
     h, m = divmod(abs(utc_offset_min), 60)
     return f"UTC{sign}{h:02d}:{m:02d}"
-
-
-def _iter_source_entries(dive: dict):
-    for source, value in dive["sources"].items():
-        for entry in value if isinstance(value, list) else [value]:
-            yield source, entry
 
 
 def _computer_label(info: dict) -> str:
@@ -113,7 +109,7 @@ def _cmd_list(con, include_tests: bool) -> int:
 
 
 def _cmd_show(db_path: str, dive_number: int) -> int:
-    from .api import load_dive
+    from .api import load_dive, source_logs
 
     dive = load_dive(db_path, dive_number)
     depth = f"{dive['max_depth_m']:.1f} m" if dive["max_depth_m"] is not None else "?"
@@ -123,7 +119,7 @@ def _cmd_show(db_path: str, dive_number: int) -> int:
         f"({_fmt_offset(dive['utc_offset_min'])})  "
         f"duration {_fmt_duration(dive['duration_s'])}  max depth {depth}"
     )
-    for source, e in _iter_source_entries(dive):
+    for source, e in source_logs(dive):
         info = e["computer"]
         serial = f"  serial {info['serial']}" if info.get("serial") else ""
         print(f"\n  [{source}] {_computer_label(info)}{serial}"
@@ -175,7 +171,7 @@ def _cmd_show(db_path: str, dive_number: int) -> int:
 
 
 def _cmd_export(db_path: str, dive_number: int, fmt: str, out: Path | None) -> int:
-    from .api import load_dive
+    from .api import load_dive, source_logs
 
     dive = load_dive(db_path, dive_number)
     if fmt == "json":
@@ -190,7 +186,7 @@ def _cmd_export(db_path: str, dive_number: int, fmt: str, out: Path | None) -> i
     import csv
 
     columns: list[str] = []
-    for _source, e in _iter_source_entries(dive):
+    for _source, e in source_logs(dive):
         for c in e["samples"]:
             if c not in columns:
                 columns.append(c)
@@ -198,7 +194,7 @@ def _cmd_export(db_path: str, dive_number: int, fmt: str, out: Path | None) -> i
     try:
         writer = csv.writer(fh)
         writer.writerow(["source", "source_dive_id"] + columns)
-        for source, e in _iter_source_entries(dive):
+        for source, e in source_logs(dive):
             samples = e["samples"]
             n = len(samples.get("t_s", []))
             for i in range(n):
@@ -213,6 +209,41 @@ def _cmd_export(db_path: str, dive_number: int, fmt: str, out: Path | None) -> i
         if out:
             fh.close()
             print(f"wrote {out}")
+    return 0
+
+
+def _cmd_rebuild(db_path: Path, archive_dir: Path) -> int:
+    from .ingest.garmin_fit import ingest_garmin_dir
+    from .ingest.shearwater_db import ingest_shearwater_db
+    from .match.matcher import run_match
+
+    def oldest_first(kind: str) -> list[Path]:
+        return sorted((archive_dir / kind).glob("*"), key=lambda p: p.stat().st_mtime)
+
+    tmp = db_path.with_name(db_path.name + ".rebuild")
+    tmp.unlink(missing_ok=True)
+    con = store_db.connect(tmp)
+    indexes = oldest_first("garmin_index")
+    stats = ingest_garmin_dir(
+        con, archive_dir, archive_dir / "fit", indexes[-1] if indexes else None
+    )
+    print(f"garmin: {stats}")
+    failed = stats["failed"]
+    # Each Cloud export holds every dive so far, so older exports go first and
+    # later ones only add the dives that are new.
+    for path in oldest_first("shearwater_db"):
+        stats = ingest_shearwater_db(con, archive_dir, path)
+        print(f"shearwater {path.name[:12]}: {stats}")
+        failed += stats["failed"]
+    print(f"match: {run_match(con)}")
+    con.close()
+    if failed:
+        print(f"{failed} file(s) failed; {db_path} is unchanged, the new store is {tmp}")
+        return 1
+    for suffix in ("-wal", "-shm"):
+        Path(f"{db_path}{suffix}").unlink(missing_ok=True)
+    tmp.replace(db_path)
+    print(f"rebuilt {db_path}")
     return 0
 
 
@@ -239,6 +270,7 @@ def main(argv: list[str] | None = None) -> int:
     p_sw.add_argument("db_path", type=Path)
 
     sub.add_parser("match", help="match dual-computer dives, build canonical dives")
+    sub.add_parser("rebuild", help="rebuild the store from the archive")
 
     p_verify = sub.add_parser("verify", help="run the verification suite")
     p_verify.add_argument("--xml-dir", type=Path, default=None,
@@ -263,8 +295,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="write an image instead of opening a window")
 
     args = parser.parse_args(argv)
-    con = store_db.connect(args.db)
     archive_dir = Path(args.archive)
+    if args.command == "rebuild":
+        return _cmd_rebuild(Path(args.db), archive_dir)
+    con = store_db.connect(args.db)
 
     if args.command == "init":
         print(f"initialized {args.db}")
@@ -273,7 +307,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "ingest" and args.source == "garmin":
         from .ingest.garmin_fit import ingest_garmin_dir
 
-        stats = ingest_garmin_dir(con, archive_dir, args.fit_dir, args.index)
+        stats = ingest_garmin_dir(con, archive_dir, args.fit_dir, args.fit_dir / args.index)
         print(f"garmin: {stats}")
         return 1 if stats["failed"] else 0
 

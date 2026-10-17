@@ -2,7 +2,7 @@
 
     import bottomtime
     dive = bottomtime.load_dive("data/dives.db", 291)
-    dive["sources"]["garmin"]["samples"]["depth_m"]
+    dive["sources"]["garmin"][0]["samples"]["depth_m"]
 """
 
 from __future__ import annotations
@@ -10,8 +10,6 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
-
-from pnf import COMPUTER_MODELS
 
 _SAMPLE_TABLES = {"garmin": "garmin_samples", "shearwater": "shearwater_samples"}
 
@@ -35,20 +33,12 @@ def computer_info(source: str, header: dict) -> dict:
         return {"model": model, "firmware": firmware, "serial": serial}
 
     pnf_header = header.get("pnf") or {}
-    model_id = pnf_header.get("computer_model")
-    model = (
-        COMPUTER_MODELS.get(model_id, f"model {model_id}")
-        if model_id is not None
-        else None
-    )
     firmware = pnf_header.get("computer_firmware")
-    serial = (header.get("dive_details") or {}).get("SerialNumber")
-    if not serial and pnf_header.get("computer_serial") is not None:
-        serial = f"{pnf_header['computer_serial']:08X}"
+    serial = pnf_header.get("computer_serial")
     return {
-        "model": model,
+        "model": pnf_header.get("computer_model"),
         "firmware": f"v{firmware}" if firmware is not None else None,
-        "serial": serial,
+        "serial": f"{serial:08X}" if serial is not None else None,
     }
 
 
@@ -58,7 +48,10 @@ def _columns_of(con: sqlite3.Connection, table: str) -> list[str]:
 
 def load_dive(db_path: str | Path, dive_number: int) -> dict:
     """Load one canonical dive with every member source log's samples as
-    column-oriented lists (ready for plotting / DataFrame construction)."""
+    column-oriented lists (ready for plotting / DataFrame construction).
+
+    ``dive["sources"]`` maps each source to a list of its logs, because one
+    Garmin activity can match several Shearwater logs (a pool session)."""
     con = sqlite3.connect(db_path)
     con.row_factory = sqlite3.Row
     try:
@@ -71,7 +64,8 @@ def load_dive(db_path: str | Path, dive_number: int) -> dict:
         out["sources"] = {}
         members = con.execute(
             "SELECT sd.* FROM source_dives sd JOIN dive_members dm"
-            " ON dm.source_dive_id = sd.id WHERE dm.dive_id=?",
+            " ON dm.source_dive_id = sd.id WHERE dm.dive_id=?"
+            " ORDER BY sd.start_time_local",
             (dive["id"],),
         ).fetchall()
         for sd in members:
@@ -99,7 +93,7 @@ def load_dive(db_path: str | Path, dive_number: int) -> dict:
                 "gases": [
                     {k: g[k] for k in g.keys()}
                     for g in con.execute(
-                        "SELECT gas_index, o2_pct, he_pct, circuit, enabled, used"
+                        "SELECT gas_index, o2_pct, he_pct, circuit, enabled"
                         " FROM gases WHERE source_dive_id=? ORDER BY gas_index",
                         (sd["id"],),
                     )
@@ -114,15 +108,7 @@ def load_dive(db_path: str | Path, dive_number: int) -> dict:
                     )
                 ],
             }
-            key = sd["source"]
-            if key in out["sources"]:  # several logs from one source (splits)
-                existing = out["sources"][key]
-                if isinstance(existing, list):
-                    existing.append(entry)
-                else:
-                    out["sources"][key] = [existing, entry]
-            else:
-                out["sources"][key] = entry
+            out["sources"].setdefault(sd["source"], []).append(entry)
         out["matches"] = [
             {k: m[k] for k in m.keys()}
             for m in con.execute(
@@ -138,6 +124,13 @@ def load_dive(db_path: str | Path, dive_number: int) -> dict:
         return out
     finally:
         con.close()
+
+
+def source_logs(dive: dict):
+    """Yield (source, log) for every member log of a loaded dive."""
+    for source, logs in dive["sources"].items():
+        for log in logs:
+            yield source, log
 
 
 def list_dives(db_path: str | Path, include_tests: bool = False) -> list[dict]:

@@ -5,13 +5,14 @@ Design principles:
   from raw_artifacts; the database holds decoded views of them.
 - One row per source log in source_dives; per-source sample tables are wide
   (each source has a fixed channel vocabulary) and never resampled.
-- Anything not understood is preserved in undecoded_payloads so a decoder
-  upgrade can backfill without re-acquiring data.
+- Anything not understood is preserved in undecoded_payloads.
+- The database is disposable. When the schema or a decoder changes,
+  `bottomtime rebuild` re-ingests everything from the archive.
 - matches links two source dives that recorded the same physical dive;
   dives is the canonical entity built from matches + singletons.
 """
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 DDL = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -35,7 +36,7 @@ CREATE TABLE IF NOT EXISTS source_dives (
   artifact_id INTEGER NOT NULL REFERENCES raw_artifacts(id),
   source_key TEXT NOT NULL,        -- garmin activityId | shearwater '<serial>#<diveNumber>'
   content_hash TEXT NOT NULL,
-  decoder_version INTEGER NOT NULL,
+  decoder_version TEXT NOT NULL,   -- package that decoded it, e.g. 'pnf 0.2.0' 
   start_time_utc TEXT,             -- shearwater: NULL until matcher backfills
   start_time_local TEXT NOT NULL,
   utc_offset_min INTEGER,
@@ -81,19 +82,21 @@ CREATE TABLE IF NOT EXISTS shearwater_samples (
   depth_m REAL,
   temp_c REAL,
   stop_depth_m REAL,               -- first/deepest stop depth; 0 = no stop
-  stop_or_ndl_min REAL,            -- stop time when in deco, NDL otherwise
+  ndl_min REAL,                    -- NULL while in deco
+  stop_time_min REAL,              -- NULL when there is no stop
   tts_min REAL,
+  at_plus_five_min INTEGER,        -- TTS if the diver stayed 5 more minutes
   in_deco INTEGER,
   avg_ppo2 REAL,
   o2_pct REAL,
   he_pct REAL,
   setpoint REAL,
   cns_pct REAL,
-  gf99 REAL,                       -- populated at decoder_version >= 2; NULL under DCIEM
-  ceiling_m REAL,                  -- populated at decoder_version >= 2; NULL under DCIEM
-  safe_ascent_depth_m REAL,        -- DCIEM only (bytes 24-25); NULL otherwise, v3
-  battery_pct INTEGER,             -- battery percent remaining (byte 11), v3
-  sac REAL,                        -- surface air consumption (bytes 30-31), v3
+  gf99 REAL,                       -- NULL under DCIEM
+  ceiling_m REAL,                  -- NULL under DCIEM
+  safe_ascent_depth_m REAL,        -- DCIEM only (bytes 24-25)
+  battery_pct INTEGER,             -- battery percent remaining (byte 11)
+  sac REAL,                        -- surface air consumption (bytes 30-31)
   sensor1_raw INTEGER,
   sensor2_raw INTEGER,
   sensor3_raw INTEGER,
@@ -102,11 +105,11 @@ CREATE TABLE IF NOT EXISTS shearwater_samples (
   sensor3_ppo2 REAL,
   battery_v REAL,
   status_flags INTEGER,             -- raw sample byte 12 (packed mode/status bits)
-  solenoid_fired_count INTEGER,     -- CCR O2 solenoid firings, byte 12 bits 6-7, v3
+  solenoid_fired_count INTEGER,     -- CCR O2 solenoid firings, byte 12 bits 6-7
   tank0_psi REAL,
   tank1_psi REAL,
   gas_time_min REAL,
-  extra_json TEXT,                 -- unmapped sample bytes, keyed 'b<offset>'
+  extra_json TEXT,                 -- pnf Sample.extra: extra AI tanks, transmitter battery
   PRIMARY KEY (source_dive_id, t_s)
 ) WITHOUT ROWID;
 
@@ -118,7 +121,6 @@ CREATE TABLE IF NOT EXISTS gases (
   he_pct REAL,
   circuit TEXT,                    -- 'oc' | 'cc' (diluent) | NULL
   enabled INTEGER,
-  used INTEGER,
   source_json TEXT
 );
 
@@ -174,10 +176,7 @@ CREATE TABLE IF NOT EXISTS dives (
   utc_offset_min INTEGER,
   duration_s REAL,
   max_depth_m REAL,
-  mode TEXT,
-  is_test INTEGER NOT NULL DEFAULT 0,
-  site TEXT,
-  notes TEXT
+  is_test INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS dive_members (
@@ -192,7 +191,7 @@ CREATE INDEX IF NOT EXISTS idx_source_dives_start ON source_dives(start_time_utc
 
 CREATE VIEW IF NOT EXISTS v_dive_summary AS
 SELECT d.id, d.dive_number, d.start_time_utc, d.utc_offset_min, d.duration_s,
-       d.max_depth_m, d.mode, d.is_test,
+       d.max_depth_m, d.is_test,
        group_concat(sd.source) AS sources,
        group_concat(sd.id) AS source_dive_ids
 FROM dives d

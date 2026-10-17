@@ -15,14 +15,15 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
+from importlib.metadata import version
 from pathlib import Path
 
 from garmin_fit_sdk import Decoder, Stream
 
-from ..store.db import source_dive_exists, utcnow
+from ..store.db import source_dive_exists
 from .archive import archive_file
 
-DECODER_VERSION = 1
+DECODER_VERSION = f"garmin-fit-sdk {version('garmin-fit-sdk')}"
 
 FIT_EPOCH_OFFSET = 631065600  # FIT timestamps count from 1989-12-31 00:00 UTC
 SEMICIRCLE = 180.0 / 2**31
@@ -104,9 +105,10 @@ def ingest_fit_file(
             raise ValueError(f"no records and no start time in {path.name}")
 
     file_id = (messages.get("file_id_mesgs") or [{}])[0]
-    activity_id = str(file_id.get("serial_number", ""))
-    # Garmin Connect's activityId is not in the file; recover it from the
-    # index by matching start time, else from a '<...>_<id>.fit' filename.
+    # A FIT file is identified by its device serial and creation time. Garmin
+    # Connect's activityId is not in the file; when it is known, from the
+    # index or a '<...>_<id>.fit' filename, it replaces that key.
+    activity_id = f"{file_id.get('serial_number')}@{file_id.get('time_created')}"
     entry = None
     stem_id = path.stem.rsplit("_", 1)[-1]
     if stem_id.isdigit() and stem_id in index:
@@ -226,7 +228,7 @@ def ingest_fit_file(
         circuit = {"open_circuit": "oc", "closed_circuit": "cc"}.get(mode_str)
         con.execute(
             "INSERT INTO gases (source_dive_id, gas_index, o2_pct, he_pct, circuit,"
-            " enabled, used, source_json) VALUES (?,?,?,?,?,?,?,?)",
+            " enabled, source_json) VALUES (?,?,?,?,?,?,?)",
             (
                 dive_id,
                 gas.get("message_index", gi),
@@ -234,7 +236,6 @@ def ingest_fit_file(
                 gas.get("helium_content"),
                 circuit,
                 1 if gas.get("status") == "enabled" else 0,
-                None,
                 json.dumps(_jsonable(gas), separators=(",", ":")),
             ),
         )
@@ -284,11 +285,10 @@ def ingest_garmin_dir(
     con: sqlite3.Connection,
     archive_dir: Path,
     fit_dir: Path,
-    index_name: str = "dives_index.json",
+    index_path: Path | None = None,
 ) -> dict:
-    index_path = fit_dir / index_name
     index = load_index(index_path)
-    if index_path.exists():
+    if index_path and index_path.exists():
         archive_file(con, archive_dir, "garmin_index", index_path)
 
     stats = {"ingested": 0, "skipped": 0, "failed": 0}

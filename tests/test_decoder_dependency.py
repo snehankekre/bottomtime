@@ -5,6 +5,7 @@ suite). bottomtime depends on it and relies on a specific surface: the
 `decode` entry point, the `COMPUTER_MODELS` table, and a set of sample fields
 the Shearwater ingest inserts into `shearwater_samples`. This test pins that
 contract so a breaking pnf upgrade fails here rather than at ingest time.
+The header keys are the ones ingest and api.computer_info read.
 """
 
 import pnf
@@ -13,7 +14,7 @@ import pnf
 def test_decode_entry_points_exist():
     assert callable(pnf.decode)
     assert callable(pnf.decompress)
-    assert 11 in pnf.COMPUTER_MODELS  # Perdix 2, surfaced by api.computer_info
+    assert pnf.COMPUTER_MODELS[11] == "Perdix 2"
 
 
 def test_sample_has_fields_ingest_inserts():
@@ -21,8 +22,8 @@ def test_sample_has_fields_ingest_inserts():
     # sample (see ingest/shearwater_db.py).
     fields = pnf.Sample.__dataclass_fields__
     for name in (
-        "t_s", "depth_m", "temp_c", "stop_depth_m", "stop_or_ndl_min", "tts_min",
-        "in_deco", "avg_ppo2", "o2_pct", "he_pct", "setpoint", "cns_pct",
+        "t_s", "depth_m", "temp_c", "stop_depth_m", "ndl_min", "stop_time_min",
+        "tts_min", "at_plus_five_min", "in_deco", "avg_ppo2", "o2_pct", "he_pct", "setpoint", "cns_pct",
         "gf99", "ceiling_m", "safe_ascent_depth_m", "battery_pct", "sac",
         "sensor1_raw", "sensor2_raw", "sensor3_raw",
         "sensor1_ppo2", "sensor2_ppo2", "sensor3_ppo2",

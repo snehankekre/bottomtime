@@ -1,10 +1,10 @@
 """Ingest a Shearwater Cloud database (dive_data.db / 'Export Database').
 
 Each dive's complete native log lives in log_data.data_bytes_1 as an sw-pnf
-blob (decoded by the pnf package); dive_details supplies the metadata layer
-(gas plan JSON, EndGF99, site/notes when present). The blob is stored verbatim
-in source_dives.raw_blob in addition to the archived .db, so every Shearwater
-byte is preserved twice over.
+blob, decoded by the pnf package. The blob carries the dive's identity and
+start time. Cloud's own tables (dive_details, the log_data JSON columns) are
+kept verbatim in header_json for EndGF99, average depth, and the gas plan. The
+blob is also stored in source_dives.raw_blob, beside the archived .db.
 """
 
 from __future__ import annotations
@@ -20,12 +20,7 @@ import pnf
 from ..store.db import source_dive_exists
 from .archive import archive_file
 
-# Decode-contract version stamped on each Shearwater source dive so that an
-# archive-first re-decode can find dives produced by an older decode. Bump this
-# whenever a pnf upgrade changes decoded output. History: 1 libdivecomputer
-# field set, 2 empirical ceiling/gf99/battery/@+5, 3 pnf reconciliation
-# (DCIEM branch, 16-bit battery, battery %, SAC, status bits).
-DECODER_VERSION = 3
+DECODER_VERSION = f"pnf {pnf.__version__}"
 
 
 def _details_row(con: sqlite3.Connection, dive_id: str) -> dict:
@@ -81,7 +76,10 @@ def _ingest_log(
         raise ValueError(f"unsupported log format {row['format']!r}")
 
     blob = row["data_bytes_1"]
-    digest = hashlib.sha256(blob).hexdigest()
+    # Hash the records, not the gzip stream. Cloud re-compresses dives between
+    # exports, and a gzip header stores the time it was written, so the same
+    # dive can arrive as different blob bytes.
+    digest = hashlib.sha256(pnf.decompress(blob)).hexdigest()
     if source_dive_exists(con, "shearwater", digest):
         return "skipped"
 
@@ -95,17 +93,13 @@ def _ingest_log(
         else {}
     )
 
-    serial = details.get("SerialNumber")
-    if not serial and "computer_serial" in dive.header:
-        serial = f"{dive.header['computer_serial']:08X}"
-    dive_number = details.get("DiveNumber") or b3.get("DiveNumber")
-    source_key = f"{serial}#{dive_number}"
+    source_key = f"{dive.header['computer_serial']:08X}#{dive.header['dive_number']}"
 
-    # DIVE_START_TIME is the local wall clock stored as a fake-UTC epoch.
-    start_epoch = b2.get("DIVE_START_TIME") or b3.get("StartTime")
-    start_local = datetime.fromtimestamp(start_epoch, tz=timezone.utc).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
+    # The start time counts seconds on the local wall clock, so reading it as
+    # UTC gives the local time. The matcher works out the real UTC offset.
+    start_local = datetime.fromtimestamp(
+        dive.header["start_time"], tz=timezone.utc
+    ).strftime("%Y-%m-%d %H:%M:%S")
 
     header = {
         "pnf": dive.header,
@@ -146,16 +140,18 @@ def _ingest_log(
 
     con.executemany(
         "INSERT INTO shearwater_samples (source_dive_id, t_s, depth_m, temp_c,"
-        " stop_depth_m, stop_or_ndl_min, tts_min, in_deco, avg_ppo2, o2_pct, he_pct,"
+        " stop_depth_m, ndl_min, stop_time_min, tts_min, at_plus_five_min, in_deco,"
+        " avg_ppo2, o2_pct, he_pct,"
         " setpoint, cns_pct, gf99, ceiling_m, safe_ascent_depth_m, battery_pct, sac,"
         " sensor1_raw, sensor2_raw, sensor3_raw,"
         " sensor1_ppo2, sensor2_ppo2, sensor3_ppo2, battery_v, status_flags,"
         " solenoid_fired_count, tank0_psi, tank1_psi, gas_time_min, extra_json)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         [
             (
                 dive_id, s.t_s, s.depth_m, s.temp_c,
-                s.stop_depth_m, s.stop_or_ndl_min, s.tts_min, s.in_deco,
+                s.stop_depth_m, s.ndl_min, s.stop_time_min, s.tts_min,
+                s.at_plus_five_min, s.in_deco,
                 s.avg_ppo2, s.o2_pct, s.he_pct,
                 s.setpoint, s.cns_pct, s.gf99, s.ceiling_m,
                 s.safe_ascent_depth_m, s.battery_pct, s.sac,
@@ -175,7 +171,7 @@ def _ingest_log(
             continue
         con.execute(
             "INSERT INTO gases (source_dive_id, gas_index, o2_pct, he_pct, circuit,"
-            " enabled, used, source_json) VALUES (?,?,?,?,?,?,NULL,NULL)",
+            " enabled, source_json) VALUES (?,?,?,?,?,?,NULL)",
             (
                 dive_id,
                 gas.index,

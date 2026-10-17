@@ -21,8 +21,7 @@ representable somewhere across those three.
 Almost none of it gets written. Subsurface's `xslt/uddf-export.xslt` emits
 seven element kinds, so four of those 17 channels survive a round trip through
 it, even though its own `struct sample` holds NDL, TTS, CNS, setpoint and ppO2
-sensors; its UDDF importer matches only five fields, so two of the seven it
-writes do not survive being read back.
+sensors.
 
 bottomtime keeps everything:
 
@@ -30,10 +29,10 @@ bottomtime keeps everything:
   become typed columns; unknown fields and Garmin's undocumented message
   types are preserved raw, per sample and per message.
 - **Decodes Shearwater's Petrel Native Format** directly from a Shearwater
-  Cloud database (`dive_data.db`, the "Export Database" output) with a pure
-  Python decoder, including per-sample **GF99, deco ceiling, CNS and battery
-  voltage** that Shearwater's own XML/CSV exports omit. Unknown record types
-  are preserved raw.
+  Cloud database (`dive_data.db`, the "Export Database" output) with
+  [pnf](https://github.com/snehankekre/pnf), including per-sample **GF99, deco
+  ceiling, @+5 and battery voltage** that Shearwater's own XML/CSV exports
+  omit. Unknown record types are preserved raw.
 - **Archives every source file verbatim**, content-addressed by SHA-256. The
   database is a decoded view; the archive is the source of truth.
 - **Reconciles dual-computer dives**: interval overlap plus depth-profile
@@ -43,6 +42,8 @@ bottomtime keeps everything:
 - **Verifies itself**: the decoder is cross-checked per-sample against
   Shearwater XML exports, against Shearwater Cloud's own computed values
   (EndGF99), and matched dives are checked for depth agreement.
+- **Rebuilds from the archive**: the database is disposable, and
+  `bottomtime rebuild` recreates it from the archived files.
 
 Everything lands in a single SQLite file with a stable schema, ready for SQL,
 pandas, or whatever you analyze with.
@@ -59,8 +60,8 @@ pip install bottomtime
 # create a store
 bottomtime init
 
-# ingest a directory of Garmin FIT files
-# (optionally with a Garmin Connect index JSON for true UTC offsets and metadata)
+# ingest a directory of Garmin FIT files. A Garmin Connect index JSON
+# (dives_index.json, or pass --index) adds activity ids and Connect metadata.
 bottomtime ingest garmin ~/dives/garmin-fits
 
 # ingest a Shearwater Cloud database export
@@ -74,6 +75,11 @@ bottomtime verify --xml-dir ~/dives/shearwater-xml
 
 bottomtime status
 ```
+
+After upgrading bottomtime, run `bottomtime rebuild`. It re-ingests every file
+in the archive into a fresh store and replaces the old one only if nothing
+failed. bottomtime refuses to open a store built with an older schema and says
+so.
 
 ## Looking at your dives
 
@@ -100,13 +106,15 @@ for d in bottomtime.list_dives("data/dives.db"):
     print(d["dive_number"], d["start_time_utc"], d["max_depth_m"], d["sources"])
 
 dive = bottomtime.load_dive("data/dives.db", 291)
-sw = pd.DataFrame(dive["sources"]["shearwater"]["samples"])
+sw = pd.DataFrame(dive["sources"]["shearwater"][0]["samples"])
 sw.plot(x="t_s", y=["depth_m", "ceiling_m"])
 ```
 
 `load_dive` returns everything about one dive: per-source samples
 (column-oriented, ready for DataFrames), gases, events, the verbatim decoded
-headers, computer model/firmware/serial, and the match metadata.
+headers, computer model/firmware/serial, and the match metadata. Each source
+maps to a list of logs, because one Garmin activity can match several
+Shearwater logs from a pool session.
 
 And it's just SQLite; the views cover the common queries directly:
 
@@ -131,11 +139,14 @@ anything not yet understood) → `matches` (dual-computer links) → `dives` +
 
 ## Notes on the PNF decoder
 
-The decoder follows libdivecomputer's `shearwater_predator_parser.c` for the
-documented fields and adds empirically verified mappings for GF99 (byte 25),
-deco ceiling (byte 24), battery voltage (byte 18) and @+5 TTS (bytes 26-27),
-validated against Shearwater Cloud's displayed values across hundreds of
-dives. Bytes without a known meaning are preserved per sample. If your dives
+Decoding lives in [pnf](https://github.com/snehankekre/pnf), and its
+[SPEC.md](https://github.com/snehankekre/pnf/blob/main/SPEC.md) documents
+every byte of the sample record. The mappings for GF99 (byte 25), deco ceiling
+(byte 24), battery voltage (bytes 17-18) and @+5 TTS (bytes 26-27) were found
+by experiment, then confirmed against Shearwater Cloud's own parser.
+`bottomtime verify` finds the decoded values identical to Shearwater's XML
+export on all 142 dives I exported, and GF99 within one point of Cloud's
+EndGF99 on all 144. If your dives
 disagree, `bottomtime verify` will say so loudly; issue reports with a
 failing blob are very welcome.
 

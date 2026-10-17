@@ -10,17 +10,11 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from .api import load_dive
+from .api import load_dive, source_logs
 
 
 def _parse(ts: str) -> datetime:
     return datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
-
-
-def _iter_source_entries(dive: dict):
-    for source, value in dive["sources"].items():
-        for entry in value if isinstance(value, list) else [value]:
-            yield source, entry
 
 
 def _nan(values: list) -> list[float]:
@@ -42,7 +36,7 @@ def aligned_series(dive: dict) -> list[dict]:
         for m in dive.get("matches", [])
     }
     out = []
-    for source, entry in _iter_source_entries(dive):
+    for source, entry in source_logs(dive):
         start = entry["start_time_utc"] or dive["start_time_utc"]
         base = (_parse(start) - t0).total_seconds()
         if source == "shearwater":

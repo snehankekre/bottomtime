@@ -21,6 +21,7 @@ connected components of those links.
 from __future__ import annotations
 
 import sqlite3
+from collections import Counter
 from datetime import datetime, timedelta
 
 from ..store.db import utcnow
@@ -35,7 +36,6 @@ XCORR_ACCEPT = 0.95
 DELTA_OVERLAP_MIN = 0.85
 DELTA_ACCEPT_M = 0.75
 AMBIGUITY_MARGIN = 0.02
-DEFAULT_OFFSET_MIN = 480     # fallback when no Garmin dive is near in time
 
 
 def _dt(s: str) -> datetime:
@@ -86,6 +86,11 @@ def run_match(con: sqlite3.Connection, verbose: bool = True) -> dict:
         s["wall_dt"] = _dt(s["start_time_local"])
         s["test"] = _is_test(s["duration_s"], s["max_depth_m"])
 
+    # Fallback for a Shearwater dive with no Garmin dive near it in time: the
+    # offset the diver's Garmin logged most often, else UTC.
+    seen = Counter(g["utc_offset_min"] for g in garmin if g["utc_offset_min"] is not None)
+    default_offset = seen.most_common(1)[0][0] if seen else 0
+
     candidates: dict[int, list[dict]] = {}
     for s in shearwater:
         if s["test"]:
@@ -96,7 +101,7 @@ def run_match(con: sqlite3.Connection, verbose: bool = True) -> dict:
             if g["utc_offset_min"] is not None
             and abs((g["start_local_dt"] - s["wall_dt"]).total_seconds()) < 2 * 86400
         }
-        offsets.add(DEFAULT_OFFSET_MIN)
+        offsets.add(default_offset)
         found = []
         for offset in offsets:
             s_utc = s["wall_dt"] - timedelta(minutes=offset)
@@ -228,7 +233,7 @@ def run_match(con: sqlite3.Connection, verbose: bool = True) -> dict:
                     utcnow(),
                 ),
             )
-        _rebuild_dives(con, garmin, shearwater)
+        _rebuild_dives(con, garmin, shearwater, default_offset)
         _backfill_shearwater_utc(con)
 
     stats = {
@@ -245,7 +250,7 @@ def run_match(con: sqlite3.Connection, verbose: bool = True) -> dict:
     return stats
 
 
-def _rebuild_dives(con, garmin, shearwater):
+def _rebuild_dives(con, garmin, shearwater, default_offset):
     """Rebuild canonical dives as connected components of match links."""
     con.execute("DELETE FROM dive_members")
     con.execute("DELETE FROM dives")
@@ -254,7 +259,6 @@ def _rebuild_dives(con, garmin, shearwater):
         "SELECT garmin_source_dive_id AS g, shearwater_source_dive_id AS s,"
         " clock_offset_s FROM matches WHERE status IN ('auto','confirmed')"
     ).fetchall()
-    g_by_id = {g["id"]: g for g in garmin}
     s_by_id = {s["id"]: s for s in shearwater}
 
     partners: dict[int, list] = {}
@@ -279,14 +283,14 @@ def _rebuild_dives(con, garmin, shearwater):
                 "members": members,
             }
         )
-    default = timedelta(minutes=DEFAULT_OFFSET_MIN)
+    default = timedelta(minutes=default_offset)
     for s in shearwater:
         if s["id"] in matched_s:
             continue
         entries.append(
             {
                 "start_utc": (s["wall_dt"] - default).strftime("%Y-%m-%d %H:%M:%S"),
-                "offset_min": DEFAULT_OFFSET_MIN,
+                "offset_min": default_offset,
                 "duration": s["duration_s"],
                 "depth": s["max_depth_m"],
                 "test": s["test"],
@@ -301,7 +305,7 @@ def _rebuild_dives(con, garmin, shearwater):
             number += 1
         cur = con.execute(
             "INSERT INTO dives (dive_number, start_time_utc, utc_offset_min,"
-            " duration_s, max_depth_m, mode, is_test) VALUES (?,?,?,?,?,NULL,?)",
+            " duration_s, max_depth_m, is_test) VALUES (?,?,?,?,?,?)",
             (
                 number if not e["test"] else None,
                 e["start_utc"],
