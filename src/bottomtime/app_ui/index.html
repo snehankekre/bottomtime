@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bottomtime</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-0: #f4f4f2;
+    --surface-1: #fcfcfb;
+    --surface-2: #ecebe7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #7a7974;
+    --hairline: #dcdbd6;
+    --grid: #ecebe7;
+    --accent: #2a78d6;
+    --critical: #d03b3b;
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --series-3: #1baf7a;
+    --sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-0: #121211;
+      --surface-1: #1a1a19;
+      --surface-2: #262624;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #8d8c85;
+      --hairline: #383835;
+      --grid: #2a2a28;
+      --accent: #3987e5;
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--surface-0); color: var(--text-primary); font: 14px/1.45 var(--sans); }
+  button, select, input { font: inherit; color: inherit; }
+  button {
+    background: var(--surface-1); border: 1px solid var(--hairline); border-radius: 6px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--text-muted); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  header.bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    padding: 12px 20px; background: var(--surface-1); border-bottom: 1px solid var(--hairline);
+    position: sticky; top: 0; z-index: 5;
+  }
+  .brand { font-weight: 600; font-size: 16px; }
+  .brand .count { font-weight: 400; color: var(--text-secondary); font-size: 13px; margin-left: 8px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .status { padding: 8px 20px; font-size: 13px; background: var(--surface-2); border-bottom: 1px solid var(--hairline); }
+  .status.error { color: var(--critical); }
+  .status .spin { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border: 2px solid var(--text-muted);
+    border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  main { padding: 20px; max-width: 1400px; margin: 0 auto; }
+
+  .card { background: var(--surface-1); border: 1px solid var(--hairline); border-radius: 10px; padding: 16px; }
+  .empty { max-width: 720px; margin: 40px auto; }
+  .empty h1 { font-size: 22px; margin: 0 0 6px; }
+  .empty p { color: var(--text-secondary); margin: 0 0 18px; }
+  .step { display: flex; gap: 14px; align-items: flex-start; padding: 14px 0; border-top: 1px solid var(--hairline); }
+  .step .n { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--surface-2);
+    display: grid; place-items: center; font-size: 12px; font-weight: 600; }
+  .step h2 { font-size: 15px; margin: 0 0 2px; }
+  .step p { margin: 0 0 8px; font-size: 13px; }
+
+  .filters { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; font-size: 13px; color: var(--text-secondary); }
+  .filters label { display: flex; gap: 6px; align-items: center; }
+  .filters input[type=date], .filters select { background: var(--surface-1); border: 1px solid var(--hairline); border-radius: 6px; padding: 4px 8px; }
+
+  figure { margin: 0 0 16px; }
+  .chart-title { font-size: 13px; color: var(--text-secondary); margin: 0 0 6px; }
+  svg text { font: 11px var(--sans); fill: var(--text-muted); }
+  svg .grid line { stroke: var(--grid); }
+  svg .axis line, svg .axis path { stroke: var(--hairline); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--surface-1); border: 1px solid var(--hairline); border-radius: 10px; overflow: hidden; }
+  th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
+  th { font-size: 12px; font-weight: 600; color: var(--text-secondary); background: var(--surface-1); cursor: pointer; user-select: none; }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  th[aria-sort=ascending]::after { content: " ▲"; font-size: 9px; }
+  th[aria-sort=descending]::after { content: " ▼"; font-size: 9px; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--surface-2); }
+  tr.test td { color: var(--text-muted); }
+  .tag { font-size: 11px; color: var(--text-muted); border: 1px solid var(--hairline); border-radius: 4px; padding: 0 4px; margin-left: 6px; }
+
+  .detail-head { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+  .detail-head h1 { font-size: 20px; margin: 0; }
+  .detail-head .facts { color: var(--text-secondary); }
+  .detail-head .spacer { flex: 1; }
+  .logs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .log h3 { margin: 0 0 4px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .log dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 12px; }
+  .log dt { color: var(--text-muted); }
+  .log dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .key { display: inline-block; width: 16px; height: 0; border-top: 2px solid; }
+  .key.dash { border-top-style: dashed; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin: 0 0 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .panels { position: relative; }
+  .panels:focus-visible { outline-offset: 4px; }
+  .note { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+
+  .tip { position: fixed; pointer-events: none; z-index: 20; background: var(--surface-1); border: 1px solid var(--hairline);
+    border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.12); min-width: 180px; }
+  .tip .t { color: var(--text-secondary); margin-bottom: 4px; }
+  .tip .row { display: grid; grid-template-columns: 16px 1fr auto; gap: 6px; align-items: center; }
+  .tip .who { font-weight: 600; margin-top: 4px; grid-column: 1 / -1; }
+  .tip .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tip .l { color: var(--text-muted); }
+
+  dialog { border: 1px solid var(--hairline); border-radius: 12px; padding: 20px; background: var(--surface-1); color: var(--text-primary); width: 380px; }
+  dialog::backdrop { background: rgba(0,0,0,.35); }
+  dialog h2 { margin: 0 0 6px; font-size: 17px; }
+  dialog p { margin: 0 0 12px; font-size: 13px; color: var(--text-secondary); }
+  dialog label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; }
+  dialog input { width: 100%; margin-top: 4px; padding: 7px 9px; border: 1px solid var(--hairline); border-radius: 6px; background: var(--surface-0); }
+  dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+  .err { color: var(--critical); font-size: 13px; min-height: 1em; }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="brand">bottomtime<span class="count" id="count"></span></div>
+  <div class="actions">
+    <button id="btn-cloud" title="Read every dive Shearwater Cloud has on this Mac">Read Shearwater Cloud</button>
+    <button id="btn-garmin">Garmin Connect</button>
+    <button id="btn-files">Add files…</button>
+    <button id="btn-export-all">Export all…</button>
+  </div>
+</header>
+<div class="status" id="status" hidden></div>
+<input type="file" id="file-input" multiple accept=".fit,.db" hidden>
+
+<main>
+  <section id="empty" class="empty card" hidden>
+    <h1>Your dives, from every computer, on one timeline</h1>
+    <p>bottomtime reads the logs your dive computers already keep, lines up the ones that recorded the same dive, and keeps every channel they recorded, including GF99 and the deco ceiling. Everything stays on this Mac.</p>
+    <div class="step"><div class="n">1</div><div>
+      <h2>Shearwater</h2>
+      <p id="empty-cloud">If Shearwater Cloud is installed and synced, bottomtime reads its dives directly.</p>
+      <button class="primary" id="empty-btn-cloud">Read Shearwater Cloud</button>
+    </div></div>
+    <div class="step"><div class="n">2</div><div>
+      <h2>Garmin Descent</h2>
+      <p>Sign in to Garmin Connect once and bottomtime downloads your dives. Your password goes only to Garmin.</p>
+      <button id="empty-btn-garmin">Sign in to Garmin Connect</button>
+    </div></div>
+    <div class="step"><div class="n">3</div><div>
+      <h2>Anything else</h2>
+      <p>Add .fit files from a Garmin, or a .db file from Shearwater Cloud's File → Export → Export Database.</p>
+      <button id="empty-btn-files">Add files…</button>
+    </div></div>
+  </section>
+
+  <section id="list" hidden>
+    <div class="filters">
+      <label>From <input type="date" id="f-from"></label>
+      <label>To <input type="date" id="f-to"></label>
+      <label><input type="checkbox" id="f-tests"> Include pool and test dives</label>
+      <label>Chart <select id="f-metric">
+        <option value="max_depth_m">Max depth (m)</option>
+        <option value="gf99_surf">GF99 at surfacing (%)</option>
+        <option value="gf99_max">Max GF99 (%)</option>
+        <option value="runtime_min">Runtime (min)</option>
+        <option value="deco_min">Time in deco (min)</option>
+        <option value="cns_pct">CNS (%)</option>
+      </select></label>
+    </div>
+    <figure class="card">
+      <p class="chart-title" id="across-title"></p>
+      <svg id="across" width="100%" height="220" role="img"></svg>
+    </figure>
+    <table>
+      <thead><tr id="thead"></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </section>
+
+  <section id="detail" hidden>
+    <div class="detail-head">
+      <button id="back">← All dives</button>
+      <h1 id="d-title"></h1>
+      <span class="facts" id="d-facts"></span>
+      <span class="spacer"></span>
+      <button id="d-export">Export this dive (CSV)</button>
+    </div>
+    <div class="logs" id="d-logs"></div>
+    <div class="card">
+      <div class="legend" id="d-legend"></div>
+      <div class="panels" id="panels" tabindex="0" aria-label="Dive charts. Use the left and right arrow keys to move through the dive."></div>
+      <p class="note" id="d-note"></p>
+    </div>
+  </section>
+</main>
+
+<div class="tip" id="tip" hidden></div>
+
+<dialog id="garmin">
+  <div id="g-signin">
+    <h2>Sign in to Garmin Connect</h2>
+    <p>bottomtime downloads your dives with your Garmin account. Your password goes only to Garmin; this Mac keeps a sign-in token, like the Garmin apps do.</p>
+    <form id="g-form">
+      <label>Email <input type="email" id="g-email" autocomplete="username" required></label>
+      <label>Password <input type="password" id="g-password" autocomplete="current-password" required></label>
+      <div class="err" id="g-err"></div>
+      <div class="row"><button type="button" class="g-close">Cancel</button><button class="primary" id="g-submit">Sign in</button></div>
+    </form>
+  </div>
+  <div id="g-mfa" hidden>
+    <h2>Enter the code Garmin sent you</h2>
+    <form id="g-mfa-form">
+      <label>Code <input id="g-code" inputmode="numeric" autocomplete="one-time-code" required></label>
+      <div class="err" id="g-mfa-err"></div>
+      <div class="row"><button type="button" class="g-close">Cancel</button><button class="primary">Continue</button></div>
+    </form>
+  </div>
+  <div id="g-ready" hidden>
+    <h2>Garmin Connect</h2>
+    <p>Signed in. Downloading fetches only the dives bottomtime doesn't have yet.</p>
+    <div class="row"><button type="button" id="g-signout">Sign out</button><button type="button" class="g-close">Close</button><button class="primary" id="g-sync">Download new dives</button></div>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const SERIES = ["--series-1", "--series-2", "--series-3"];
+const color = (i) => getComputedStyle(document.documentElement).getPropertyValue(SERIES[i % SERIES.length]).trim();
+const token = location.hash.slice(1);
+let overview = null;
+let sortKey = "start_time_utc", sortDir = -1;
+
+// ---- talking to Python ----
+async function call(name, ...args) {
+  if (window.pywebview && window.pywebview.api) return window.pywebview.api[name](...args);
+  const r = await fetch("/api/" + name, {
+    method: "POST", headers: {"X-Token": token, "Content-Type": "application/json"}, body: JSON.stringify(args),
+  });
+  if (!r.ok) throw new Error(`${name} failed (${r.status})`);
+  return r.json();
+}
+const native = () => overview && overview.native;
+
+function showStatus(text, kind) {
+  const el = $("status");
+  el.hidden = !text;
+  el.className = "status" + (kind === "error" ? " error" : "");
+  el.textContent = "";
+  if (kind === "busy") { const s = document.createElement("span"); s.className = "spin"; el.append(s); }
+  el.append(text || "");
+}
+
+async function startJob(promise) {
+  let res;
+  try { res = await promise; } catch (e) { return showStatus(String(e.message || e), "error"); }
+  if (!res || res.cancelled) return;
+  if (res.error) return showStatus(res.error, "error");
+  setBusy(true);
+  for (;;) {
+    const p = await call("progress");
+    if (!p.busy) {
+      setBusy(false);
+      if (p.error) showStatus(p.error, "error"); else showStatus("");
+      return refresh();
+    }
+    showStatus(p.message + "…", "busy");
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
+function setBusy(on) {
+  for (const b of document.querySelectorAll("header button, .empty button")) b.disabled = on || b.dataset.off === "1";
+}
+
+// ---- formatting ----
+const pad = (n) => String(n).padStart(2, "0");
+function localDate(d) {
+  const t = new Date(d.start_time_utc.replace(" ", "T") + "Z");
+  return new Date(t.getTime() + (d.utc_offset_min || 0) * 60000);
+}
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const fmtDate = (t) => `${t.getUTCDate()} ${MONTHS[t.getUTCMonth()]} ${t.getUTCFullYear()}`;
+const fmtClock = (t) => `${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}`;
+function fmtDur(s) {
+  if (s == null) return "";
+  s = Math.round(s);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+  return h ? `${h}:${pad(m)}:${pad(x)}` : `${m}:${pad(x)}`;
+}
+const num = (v, d = 0) => (v == null ? "" : Number(v).toFixed(d));
+
+// ---- list ----
+const COLUMNS = [
+  {key: "number", label: "#", num: true, get: (d) => d.number, show: (d) => d.number ?? ""},
+  {key: "start_time_utc", label: "Date", get: (d) => d.start_time_utc,
+   show: (d) => { const t = localDate(d); return `${fmtDate(t)} ${fmtClock(t)}`; }},
+  {key: "duration_s", label: "Runtime", num: true, get: (d) => d.duration_s, show: (d) => fmtDur(d.duration_s)},
+  {key: "max_depth_m", label: "Max depth", num: true, get: (d) => d.max_depth_m, show: (d) => d.max_depth_m == null ? "" : num(d.max_depth_m, 1) + " m"},
+  {key: "deco_min", label: "Deco", num: true, get: (d) => d.deco_min, show: (d) => d.deco_min >= 0.5 ? num(d.deco_min) + " min" : ""},
+  {key: "gf99_max", label: "Max GF99", num: true, get: (d) => d.gf99_max, show: (d) => num(d.gf99_max)},
+  {key: "gf99_surf", label: "GF99 surfacing", num: true, get: (d) => d.gf99_surf, show: (d) => num(d.gf99_surf)},
+  {key: "cns_pct", label: "CNS", num: true, get: (d) => d.cns_pct, show: (d) => d.cns_pct == null ? "" : num(d.cns_pct) + "%"},
+  {key: "mode", label: "Mode", get: (d) => d.mode, show: (d) => d.mode || ""},
+  {key: "computers", label: "Computers", get: (d) => d.computers.join(" + "), show: (d) => d.computers.join(" + ")},
+];
+const METRICS = {
+  max_depth_m: {label: "Max depth (m)", get: (d) => d.max_depth_m, down: true},
+  gf99_surf: {label: "GF99 at surfacing (%)", get: (d) => d.gf99_surf},
+  gf99_max: {label: "Max GF99 (%)", get: (d) => d.gf99_max},
+  runtime_min: {label: "Runtime (min)", get: (d) => d.duration_s == null ? null : d.duration_s / 60},
+  deco_min: {label: "Time in deco (min)", get: (d) => d.deco_min},
+  cns_pct: {label: "CNS (%)", get: (d) => d.cns_pct},
+};
+
+function filtered() {
+  const from = $("f-from").value, to = $("f-to").value, tests = $("f-tests").checked;
+  return overview.dives.filter((d) => {
+    if (d.is_test && !tests) return false;
+    const day = localDate(d).toISOString().slice(0, 10);
+    return (!from || day >= from) && (!to || day <= to);
+  });
+}
+
+function renderList() {
+  const dives = filtered();
+  const head = $("thead");
+  head.textContent = "";
+  for (const c of COLUMNS) {
+    const th = document.createElement("th");
+    th.textContent = c.label;
+    if (c.num) th.className = "num";
+    th.tabIndex = 0;
+    if (c.key === sortKey) th.setAttribute("aria-sort", sortDir > 0 ? "ascending" : "descending");
+    const sort = () => { sortDir = c.key === sortKey ? -sortDir : (c.num ? -1 : 1); sortKey = c.key; renderList(); };
+    th.onclick = sort;
+    th.onkeydown = (e) => { if (e.key === "Enter") sort(); };
+    head.append(th);
+  }
+  const col = COLUMNS.find((c) => c.key === sortKey);
+  dives.sort((a, b) => {
+    const x = col.get(a), y = col.get(b);
+    if (x == null) return 1; if (y == null) return -1;
+    return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
+  });
+  const body = $("tbody");
+  body.textContent = "";
+  for (const d of dives) {
+    const tr = document.createElement("tr");
+    if (d.is_test) tr.className = "test";
+    tr.tabIndex = 0;
+    for (const c of COLUMNS) {
+      const td = document.createElement("td");
+      td.textContent = c.show(d);
+      if (c.num) td.className = "num";
+      if (c.key === "number" && d.is_test) { const t = document.createElement("span"); t.className = "tag"; t.textContent = "pool/test"; td.append(t); }
+      tr.append(td);
+    }
+    tr.onclick = () => openDive(d.id);
+    tr.onkeydown = (e) => { if (e.key === "Enter") openDive(d.id); };
+    body.append(tr);
+  }
+  renderAcross(dives);
+}
+
+// ---- svg helpers ----
+const NS = "http://www.w3.org/2000/svg";
+function el(name, attrs, parent) {
+  const n = document.createElementNS(NS, name);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.append(n);
+  return n;
+}
+function ticks(lo, hi, count) {
+  const span = hi - lo || 1, raw = span / count, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 5, 10].map((m) => m * mag).find((s) => span / s <= count) || 10 * mag;
+  const out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+const scale = (d0, d1, r0, r1) => (v) => r0 + ((v - d0) / (d1 - d0 || 1)) * (r1 - r0);
+
+// ---- across dives ----
+function renderAcross(dives) {
+  const svg = $("across");
+  svg.textContent = "";
+  const m = METRICS[$("f-metric").value];
+  $("across-title").textContent = `${m.label} for each dive, by date. Click a dot to open the dive.`;
+  const pts = dives.map((d) => ({d, x: localDate(d).getTime(), y: m.get(d)})).filter((p) => p.y != null);
+  const W = svg.clientWidth || 800, H = 220, L = 44, R = 12, T = 10, B = 26;
+  if (!pts.length) { el("text", {x: L, y: H / 2}, svg).textContent = "No dives with this value in the selected range."; return; }
+  const x0 = Math.min(...pts.map((p) => p.x)), x1 = Math.max(...pts.map((p) => p.x));
+  const yMax = Math.max(...pts.map((p) => p.y)) || 1;
+  const sx = scale(x0 - 86400000, x1 + 86400000, L, W - R);
+  const sy = m.down ? scale(0, yMax * 1.05, T, H - B) : scale(0, yMax * 1.05, H - B, T);
+  const grid = el("g", {class: "grid"}, svg);
+  for (const v of ticks(0, yMax * 1.05, 4)) {
+    el("line", {x1: L, x2: W - R, y1: sy(v), y2: sy(v)}, grid);
+    el("text", {x: L - 6, y: sy(v) + 4, "text-anchor": "end"}, svg).textContent = v;
+  }
+  const months = [];
+  for (let t = new Date(x0); t.getTime() <= x1; t = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 1))) months.push(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), 1));
+  const every = Math.ceil(months.length / Math.max(1, Math.floor((W - L) / 70)));
+  months.forEach((t, i) => {
+    if (i % every || sx(t) < L) return;
+    const d = new Date(t);
+    el("text", {x: sx(t), y: H - 8, "text-anchor": "middle"}, svg).textContent = `${MONTHS[d.getUTCMonth()]} ${String(d.getUTCFullYear()).slice(2)}`;
+  });
+  const dots = el("g", {}, svg);
+  for (const p of pts) {
+    p.cx = sx(p.x); p.cy = sy(p.y);
+    el("circle", {cx: p.cx, cy: p.cy, r: 4, fill: color(0), stroke: "var(--surface-1)", "stroke-width": 2}, dots);
+  }
+  const ring = el("circle", {r: 7, fill: "none", stroke: "var(--text-primary)", "stroke-width": 1.5, visibility: "hidden"}, svg);
+  const nearest = (e) => {
+    const r = svg.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    let best = null, bd = 24 * 24;
+    for (const p of pts) { const dd = (p.cx - mx) ** 2 + (p.cy - my) ** 2; if (dd < bd) { bd = dd; best = p; } }
+    return best;
+  };
+  svg.onpointermove = (e) => {
+    const p = nearest(e);
+    if (!p) { ring.setAttribute("visibility", "hidden"); hideTip(); svg.style.cursor = ""; return; }
+    ring.setAttribute("cx", p.cx); ring.setAttribute("cy", p.cy); ring.setAttribute("visibility", "visible");
+    svg.style.cursor = "pointer";
+    const t = localDate(p.d);
+    showTip(e, `${p.d.number ? "Dive " + p.d.number : "Pool/test dive"} · ${fmtDate(t)}`,
+      [{rows: [[null, m.label, num(p.y, m.label.includes("depth") ? 1 : 0)], [null, "Computers", p.d.computers.join(" + ")]]}]);
+  };
+  svg.onpointerleave = () => { ring.setAttribute("visibility", "hidden"); hideTip(); };
+  svg.onclick = (e) => { const p = nearest(e); if (p) openDive(p.d.id); };
+}
+
+// ---- tooltip ----
+function showTip(e, title, groups) {
+  const tip = $("tip");
+  tip.textContent = "";
+  const t = document.createElement("div"); t.className = "t"; t.textContent = title; tip.append(t);
+  for (const g of groups) {
+    if (g.who) { const w = document.createElement("div"); w.className = "row"; const n = document.createElement("div"); n.className = "who"; n.textContent = g.who; w.append(n); tip.append(w); }
+    for (const [c, label, value, dash] of g.rows) {
+      const row = document.createElement("div"); row.className = "row";
+      const k = document.createElement("span");
+      if (c) { k.className = "key" + (dash ? " dash" : ""); k.style.borderTopColor = c; }
+      const l = document.createElement("span"); l.className = "l"; l.textContent = label;
+      const v = document.createElement("span"); v.className = "v"; v.textContent = value;
+      row.append(k, l, v); tip.append(row);
+    }
+  }
+  tip.hidden = false;
+  const r = tip.getBoundingClientRect();
+  let x = e.clientX + 16, y = e.clientY + 16;
+  if (x + r.width > innerWidth - 8) x = e.clientX - r.width - 16;
+  if (y + r.height > innerHeight - 8) y = innerHeight - r.height - 8;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+const hideTip = () => { $("tip").hidden = true; };
+
+// ---- one dive ----
+let current = null;
+async function openDive(id) {
+  hideTip();
+  current = await call("dive", id);
+  $("list").hidden = true; $("empty").hidden = true; $("detail").hidden = false;
+  window.scrollTo(0, 0);
+  const d = current, t = localDate(d);
+  $("d-title").textContent = d.number ? `Dive ${d.number}` : "Pool or test dive";
+  $("d-facts").textContent = `${fmtDate(t)} ${fmtClock(t)} · ${fmtDur(d.duration_s)} · ${num(d.max_depth_m, 1)} m`;
+  const logs = $("d-logs");
+  logs.textContent = "";
+  d.logs.forEach((log, i) => {
+    const card = document.createElement("div"); card.className = "card log";
+    const h = document.createElement("h3");
+    const k = document.createElement("span"); k.className = "key"; k.style.borderTopColor = color(i);
+    h.append(k, `${log.computer}`);
+    const dl = document.createElement("dl");
+    const add = (a, b) => { if (!b) return; const x = document.createElement("dt"); x.textContent = a; const y = document.createElement("dd"); y.textContent = b; dl.append(x, y); };
+    add("Serial", log.serial && String(log.serial));
+    add("Started", log.start_local && log.start_local.slice(11, 19) + " on its clock");
+    add("Runtime", fmtDur(log.duration_s));
+    add("Max depth", log.max_depth_m != null && num(log.max_depth_m, 1) + " m");
+    add("Mode", log.mode);
+    add("Gases", log.gases.join(", "));
+    card.append(h, dl); logs.append(card);
+  });
+  const m = d.matches;
+  $("d-note").textContent = m.length
+    ? "Lined up from the logs' own clocks: " + m.map((x) => `${x.residual_skew_s >= 0 ? "+" : ""}${x.residual_skew_s} s, depth-profile match ${num(x.xcorr_score, 3)}`).join("; ") + ". Neither log is resampled or merged."
+    : d.logs.length > 1 ? "" : "Recorded by one computer.";
+  renderPanels();
+}
+
+const PANELS = [
+  {key: "depth", label: "Depth (m)", down: true, lines: [["depth", false], ["ceiling", true]], height: 280},
+  {key: "gf99", label: "GF99 (%)", lines: [["gf99", false]], height: 150},
+  {key: "ppo2", label: "ppO2", lines: [["ppo2", false]], height: 150},
+];
+const LABELS = {depth: "depth", ceiling: "ceiling", gf99: "GF99", ppo2: "ppO2", temp: "temp", stop: "next stop", tts: "TTS", at5: "@+5", ndl: "NDL", cns: "CNS"};
+const UNITS = {depth: [" m", 1], ceiling: [" m", 0], gf99: ["", 0], ppo2: ["", 2], temp: [" °C", 0], stop: [" m", 0], tts: [" min", 0], at5: [" min", 0], ndl: [" min", 0], cns: ["%", 0]};
+
+function renderPanels() {
+  const d = current, box = $("panels");
+  box.textContent = "";
+  const legend = $("d-legend");
+  legend.textContent = "";
+  d.logs.forEach((log, i) => {
+    for (const [ch, dash] of [["depth", false], ["ceiling", true]]) {
+      if (!log.series[ch]) continue;
+      const s = document.createElement("span"), k = document.createElement("span");
+      k.className = "key" + (dash ? " dash" : ""); k.style.borderTopColor = color(i);
+      s.append(k, `${log.computer}${ch === "ceiling" ? " ceiling" : ""}`); legend.append(s);
+    }
+  });
+  const all = d.logs.flatMap((l) => l.series.t);
+  const t0 = Math.min(...all), t1 = Math.max(...all);
+  const W = box.clientWidth || 900, L = 52, R = 16;
+  const sx = scale(t0, t1, L, W - R);
+  const shown = PANELS.filter((p) => d.logs.some((l) => p.lines.some(([ch]) => l.series[ch])));
+  const cross = [];
+  shown.forEach((p, pi) => {
+    const last = pi === shown.length - 1, H = p.height + (last ? 26 : 0), B = last ? 26 : 6, T = 22;
+    const svg = el("svg", {width: "100%", height: H, role: "img", "aria-label": p.label}, box);
+    let hi = 0;
+    for (const l of d.logs) for (const [ch] of p.lines) for (const v of l.series[ch] || []) if (v != null && v > hi) hi = v;
+    hi = hi * 1.05 || 1;
+    const sy = p.down ? scale(0, hi, T, H - B) : scale(0, hi, H - B, T);
+    const grid = el("g", {class: "grid"}, svg);
+    for (const v of ticks(0, hi, p.down ? 6 : 3)) {
+      el("line", {x1: L, x2: W - R, y1: sy(v), y2: sy(v)}, grid);
+      el("text", {x: L - 6, y: sy(v) + 4, "text-anchor": "end"}, svg).textContent = v;
+    }
+    el("text", {x: L, y: 12}, svg).textContent = p.label;
+    d.logs.forEach((log, i) => {
+      for (const [ch, dash] of p.lines) {
+        const ys = log.series[ch];
+        if (!ys) continue;
+        let path = "", pen = false;
+        log.series.t.forEach((t, j) => {
+          const v = ys[j];
+          if (v == null) { pen = false; return; }
+          path += (pen ? "L" : "M") + sx(t).toFixed(1) + " " + sy(v).toFixed(1);
+          pen = true;
+        });
+        el("path", {d: path, fill: "none", stroke: color(i), "stroke-width": dash ? 1.5 : 2,
+          "stroke-dasharray": dash ? "5 4" : "none", "stroke-linejoin": "round"}, svg);
+      }
+    });
+    if (last) {
+      const span = (t1 - t0) / 60;
+      for (const v of ticks(0, span, Math.floor((W - L) / 80))) {
+        el("text", {x: sx(t0 + v * 60), y: H - 8, "text-anchor": "middle"}, svg).textContent = v + (v === 0 ? " min" : "");
+      }
+    }
+    cross.push(el("line", {y1: T, y2: H - B, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden"}, svg));
+  });
+
+  const at = (log, t) => {
+    const ts = log.series.t;
+    let lo = 0, hi = ts.length - 1;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (ts[mid] < t) lo = mid + 1; else hi = mid; }
+    if (lo > 0 && Math.abs(ts[lo - 1] - t) < Math.abs(ts[lo] - t)) lo--;
+    const gap = ts.length > 1 ? Math.max(15, 2 * (ts[1] - ts[0])) : 15;
+    return Math.abs(ts[lo] - t) <= gap ? lo : -1;
+  };
+  let cursor = null;
+  const show = (t, e) => {
+    cursor = Math.max(t0, Math.min(t1, t));
+    for (const c of cross) { c.setAttribute("x1", sx(cursor)); c.setAttribute("x2", sx(cursor)); c.setAttribute("visibility", "visible"); }
+    const groups = d.logs.map((log, i) => {
+      const j = at(log, cursor), rows = [];
+      if (j >= 0) for (const ch of Object.keys(LABELS)) {
+        const v = log.series[ch] && log.series[ch][j];
+        if (v == null) continue;
+        const [u, dp] = UNITS[ch];
+        rows.push([ch === "depth" || ch === "ceiling" ? color(i) : null, LABELS[ch], num(v, dp) + u, ch === "ceiling"]);
+      }
+      if (!rows.length) rows.push([null, "not recording", ""]);
+      return {who: log.computer, rows};
+    });
+    const r = box.getBoundingClientRect();
+    const ev = e || {clientX: r.left + sx(cursor), clientY: r.top + 40};
+    showTip(ev, `${fmtDur(cursor - t0)} into the dive`, groups);
+  };
+  const toT = (e) => { const r = box.getBoundingClientRect(); return t0 + ((e.clientX - r.left - L) / (W - L - R)) * (t1 - t0); };
+  box.onpointermove = (e) => show(toT(e), e);
+  box.onpointerleave = () => { hideTip(); for (const c of cross) c.setAttribute("visibility", "hidden"); };
+  box.onkeydown = (e) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    show((cursor ?? t0) + (e.key === "ArrowRight" ? 1 : -1) * (e.shiftKey ? 60 : 10));
+  };
+  box.onblur = () => hideTip();
+}
+
+// ---- page ----
+async function refresh() {
+  overview = await call("overview");
+  const n = overview.dives.filter((d) => !d.is_test).length;
+  const computers = new Set(overview.dives.flatMap((d) => d.computers));
+  $("count").textContent = overview.dives.length ? `${n} dives · ${computers.size} computer${computers.size === 1 ? "" : "s"}` : "";
+  for (const id of ["btn-cloud", "empty-btn-cloud"]) {
+    const b = $(id);
+    b.dataset.off = overview.shearwater_cloud ? "0" : "1";
+    b.disabled = !overview.shearwater_cloud;
+    b.title = overview.shearwater_cloud ? "Read every dive Shearwater Cloud has on this Mac" : "Shearwater Cloud's desktop app isn't installed on this Mac";
+  }
+  $("empty-cloud").textContent = overview.shearwater_cloud
+    ? "Shearwater Cloud is installed on this Mac, so bottomtime can read its dives directly. Sync Cloud with your computer first."
+    : "Shearwater Cloud's desktop app isn't on this Mac. Install it and sync, or use step 3 with an exported .db file.";
+  $("btn-garmin").textContent = overview.garmin_signed_in ? "Download Garmin dives" : "Garmin Connect";
+  const has = overview.dives.length > 0;
+  $("empty").hidden = has || !$("detail").hidden;
+  if ($("detail").hidden) $("list").hidden = !has;
+  $("btn-export-all").disabled = !has;
+  if (has) renderList();
+}
+
+function chooseFiles() {
+  if (native()) return startJob(call("choose_files"));
+  $("file-input").click();
+}
+$("file-input").onchange = async (e) => {
+  const files = await Promise.all([...e.target.files].map((f) => new Promise((res) => {
+    const r = new FileReader();
+    r.onload = () => res({name: f.name, data: r.result.split(",")[1]});
+    r.readAsDataURL(f);
+  })));
+  e.target.value = "";
+  startJob(call("import_uploads", files));
+};
+function download(path) { const a = document.createElement("a"); a.href = path + "?t=" + token; a.download = ""; a.click(); }
+
+function openGarmin() {
+  for (const id of ["g-signin", "g-mfa", "g-ready"]) $(id).hidden = true;
+  $(overview.garmin_signed_in ? "g-ready" : "g-signin").hidden = false;
+  $("g-err").textContent = ""; $("g-mfa-err").textContent = "";
+  $("garmin").showModal();
+}
+$("g-form").onsubmit = async (e) => {
+  e.preventDefault();
+  $("g-submit").disabled = true; $("g-err").textContent = "Signing in…";
+  const r = await call("garmin_sign_in", $("g-email").value, $("g-password").value);
+  $("g-submit").disabled = false; $("g-password").value = "";
+  if (r.error) { $("g-err").textContent = r.error; return; }
+  $("g-err").textContent = "";
+  if (r.status === "mfa") { $("g-signin").hidden = true; $("g-mfa").hidden = false; $("g-code").focus(); return; }
+  $("garmin").close(); await refresh(); startJob(call("garmin_sync"));
+};
+$("g-mfa-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const r = await call("garmin_mfa", $("g-code").value);
+  if (r.error) { $("g-mfa-err").textContent = r.error; return; }
+  $("garmin").close(); await refresh(); startJob(call("garmin_sync"));
+};
+$("g-sync").onclick = () => { $("garmin").close(); startJob(call("garmin_sync")); };
+$("g-signout").onclick = async () => { await call("garmin_sign_out"); $("garmin").close(); refresh(); };
+for (const b of document.querySelectorAll(".g-close")) b.onclick = () => $("garmin").close();
+
+$("btn-cloud").onclick = $("empty-btn-cloud").onclick = () => startJob(call("import_shearwater_cloud"));
+$("btn-garmin").onclick = $("empty-btn-garmin").onclick = openGarmin;
+$("btn-files").onclick = $("empty-btn-files").onclick = chooseFiles;
+$("btn-export-all").onclick = async () => {
+  if (!native()) return download("/export/all.zip");
+  showStatus("Writing every dive…", "busy");
+  const r = await call("export_all");
+  showStatus(r.path ? `Saved ${r.path}` : "");
+};
+$("d-export").onclick = async () => {
+  if (!native()) return download(`/export/dive/${current.id}.csv`);
+  const r = await call("export_dive", current.id);
+  if (r.path) showStatus(`Saved ${r.path}`);
+};
+$("back").onclick = () => { $("detail").hidden = true; current = null; hideTip(); refresh(); };
+for (const id of ["f-from", "f-to", "f-tests", "f-metric"]) $(id).onchange = renderList;
+let resizeTimer;
+addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => (current ? renderPanels() : overview && overview.dives.length && renderList()), 150); });
+
+if (token) refresh();
+else if (window.pywebview && window.pywebview.api) refresh();
+else addEventListener("pywebviewready", refresh);
+</script>
+</body>
+</html>

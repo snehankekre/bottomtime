@@ -137,7 +137,7 @@ def test_export_csv_stdout(store, capsys):
     assert cli.main(["--db", str(store), "export", "1"]) == 0
     rows = list(csv.reader(io.StringIO(capsys.readouterr().out)))
     header = rows[0]
-    assert header[:3] == ["source", "source_dive_id", "t_s"]
+    assert header[:5] == ["source", "source_dive_id", "computer", "dive_time_s", "t_s"]
     assert "gf99" in header
     body = rows[1:]
     assert len(body) == 8  # 5 garmin + 3 shearwater, never merged
@@ -159,3 +159,49 @@ def test_aligned_series_uses_stored_member_offsets(store):
     assert series["garmin"]["x"][0] == 0.0
     assert series["shearwater"]["x"][0] == pytest.approx(1.0)
     assert series["shearwater"]["label"] == "Perdix 2"
+
+
+def test_dive_summaries(store):
+    from bottomtime.api import dive_summaries
+
+    rows = {r["id"]: r for r in dive_summaries(store)}
+    assert rows[1]["number"] == 1 and rows[1]["gf99_max"] == 12.0
+    assert rows[1]["gf99_surf"] == 12.0  # last 60 samples
+    assert rows[2]["is_test"] is True
+
+
+def test_export_zip_holds_every_dive(store):
+    import zipfile
+
+    from bottomtime.app import export_zip
+
+    zf = zipfile.ZipFile(io.BytesIO(export_zip(store)))
+    names = zf.namelist()
+    assert "dives.csv" in names
+    assert "dives/2026-07-06-1-1.csv" in names
+    rows = list(csv.reader(io.StringIO(zf.read("dives/2026-07-06-1-1.csv").decode())))
+    assert len(rows) == 1 + 8  # header + 5 garmin + 3 shearwater samples
+
+
+def test_browser_mode_requires_the_token(tmp_path):
+    import threading
+    import urllib.error
+    import urllib.request
+    import webbrowser
+
+    from bottomtime import app
+
+    urls = []
+    real_open = webbrowser.open
+    webbrowser.open = urls.append
+    try:
+        threading.Thread(target=app._serve, args=(app.Api(tmp_path),), daemon=True).start()
+        while not urls:
+            pass
+    finally:
+        webbrowser.open = real_open
+    base, token = urls[0].split("/#")
+    with pytest.raises(urllib.error.HTTPError):
+        urllib.request.urlopen(urllib.request.Request(base + "/api/overview", data=b"[]"))
+    req = urllib.request.Request(base + "/api/overview", data=b"[]", headers={"X-Token": token})
+    assert json.loads(urllib.request.urlopen(req).read())["dives"] == []

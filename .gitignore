@@ -9,3 +9,4 @@ dist/
 data/
 archive/
 .DS_Store
+build/

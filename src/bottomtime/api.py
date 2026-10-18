@@ -7,9 +7,12 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import sqlite3
+from collections import defaultdict
 from pathlib import Path
+from typing import TextIO
 
 from .store.schema import SOURCES
 
@@ -46,7 +49,9 @@ def _columns_of(con: sqlite3.Connection, table: str) -> list[str]:
     return [r[1] for r in con.execute(f"PRAGMA table_info({table})")]
 
 
-def load_dive(db_path: str | Path, dive_number: int) -> dict:
+def load_dive(
+    db_path: str | Path, dive_number: int | None = None, *, dive_id: int | None = None
+) -> dict:
     """Load one canonical dive with every member source log's samples as
     column-oriented lists (ready for plotting / DataFrame construction).
 
@@ -55,9 +60,12 @@ def load_dive(db_path: str | Path, dive_number: int) -> dict:
     con = sqlite3.connect(db_path)
     con.row_factory = sqlite3.Row
     try:
-        dive = con.execute(
-            "SELECT * FROM dives WHERE dive_number=?", (dive_number,)
-        ).fetchone()
+        if dive_id is not None:
+            dive = con.execute("SELECT * FROM dives WHERE id=?", (dive_id,)).fetchone()
+        else:
+            dive = con.execute(
+                "SELECT * FROM dives WHERE dive_number=?", (dive_number,)
+            ).fetchone()
         if dive is None:
             raise KeyError(f"no dive with number {dive_number}")
         out = {k: dive[k] for k in dive.keys()}
@@ -134,6 +142,90 @@ def source_logs(dive: dict):
     for source, logs in dive["sources"].items():
         for log in logs:
             yield source, log
+
+
+def write_dive_csv(dive: dict, fh: TextIO) -> None:
+    """Every sample of every log of a loaded dive, one row per sample, never
+    merged. dive_time_s puts all the logs on the dive's shared timeline."""
+    columns: list[str] = []
+    for _source, log in source_logs(dive):
+        for c in log["samples"]:
+            if c not in columns:
+                columns.append(c)
+    writer = csv.writer(fh)
+    writer.writerow(["source", "source_dive_id", "computer", "dive_time_s"] + columns)
+    for source, log in source_logs(dive):
+        samples = log["samples"]
+        for i, t in enumerate(samples.get("t_s", [])):
+            writer.writerow(
+                [source, log["source_dive_id"], log["computer"]["model"],
+                 round(log["offset_s"] + t, 1)]
+                + [samples[c][i] if c in samples else None for c in columns]
+            )
+
+
+def dive_summaries(db_path: str | Path) -> list[dict]:
+    """One row per canonical dive with the numbers a dive list sorts on."""
+    con = sqlite3.connect(db_path)
+    con.row_factory = sqlite3.Row
+    try:
+        per_log: dict[int, dict] = {}
+        # Surfacing GF99 is the highest value in the last 60 samples (ten
+        # minutes), the window verify uses against Cloud's EndGF99.
+        for r in con.execute(
+            "SELECT s.source_dive_id AS id, max(s.gf99) AS gf99_max,"
+            " max(s.cns_pct) AS cns, sum(s.in_deco) * max(sd.sample_interval_ms) / 60000.0 AS deco_min,"
+            " (SELECT max(gf99) FROM (SELECT gf99 FROM shearwater_samples x"
+            "   WHERE x.source_dive_id = s.source_dive_id ORDER BY t_s DESC LIMIT 60)) AS gf99_surf"
+            " FROM shearwater_samples s JOIN source_dives sd ON sd.id = s.source_dive_id"
+            " GROUP BY s.source_dive_id"
+        ):
+            per_log[r["id"]] = dict(r)
+        for r in con.execute(
+            "SELECT g.source_dive_id AS id, max(g.cns_pct) AS cns,"
+            " sum(g.next_stop_depth_m > 0) * max(sd.sample_interval_ms) / 60000.0 AS deco_min"
+            " FROM garmin_samples g JOIN source_dives sd ON sd.id = g.source_dive_id"
+            " GROUP BY g.source_dive_id"
+        ):
+            per_log[r["id"]] = dict(r)
+
+        members: dict[int, list] = defaultdict(list)
+        for r in con.execute(
+            "SELECT dm.dive_id, sd.id, sd.source, sd.model, sd.mode"
+            " FROM dive_members dm JOIN source_dives sd ON sd.id = dm.source_dive_id"
+            " ORDER BY dm.offset_s"
+        ):
+            members[r["dive_id"]].append(r)
+
+        def best(logs, key):
+            values = [per_log.get(m["id"], {}).get(key) for m in logs]
+            values = [v for v in values if v is not None]
+            return max(values) if values else None
+
+        out = []
+        for d in con.execute("SELECT * FROM dives ORDER BY start_time_utc"):
+            logs = members[d["id"]]
+            out.append(
+                {
+                    "number": d["dive_number"],
+                    "id": d["id"],
+                    "start_time_utc": d["start_time_utc"],
+                    "utc_offset_min": d["utc_offset_min"],
+                    "duration_s": d["duration_s"],
+                    "max_depth_m": d["max_depth_m"],
+                    "is_test": bool(d["is_test"]),
+                    "computers": [m["model"] or m["source"] for m in logs],
+                    "mode": next((m["mode"] for m in logs if m["source"] == "shearwater"), None)
+                    or next((m["mode"] for m in logs), None),
+                    "gf99_max": best(logs, "gf99_max"),
+                    "gf99_surf": best(logs, "gf99_surf"),
+                    "cns_pct": best(logs, "cns"),
+                    "deco_min": best(logs, "deco_min"),
+                }
+            )
+        return out
+    finally:
+        con.close()
 
 
 def list_dives(db_path: str | Path, include_tests: bool = False) -> list[dict]:

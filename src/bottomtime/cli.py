@@ -11,6 +11,7 @@
     bottomtime show <dive-number>
     bottomtime export <dive-number> [--format csv|json] [-o FILE]
     bottomtime plot <dive-number> [-o FILE]
+    bottomtime app [--browser]
 
 All commands are idempotent: re-running an ingest skips anything already
 stored (content-hash keyed), match recomputes only 'auto' links. `rebuild`
@@ -170,7 +171,7 @@ def _cmd_show(db_path: str, dive_number: int) -> int:
 
 
 def _cmd_export(db_path: str, dive_number: int, fmt: str, out: Path | None) -> int:
-    from .api import load_dive, source_logs
+    from .api import load_dive, write_dive_csv
 
     dive = load_dive(db_path, dive_number)
     if fmt == "json":
@@ -182,28 +183,9 @@ def _cmd_export(db_path: str, dive_number: int, fmt: str, out: Path | None) -> i
             print(text)
         return 0
 
-    import csv
-
-    columns: list[str] = []
-    for _source, e in source_logs(dive):
-        for c in e["samples"]:
-            if c not in columns:
-                columns.append(c)
     fh = out.open("w", newline="") if out else sys.stdout
     try:
-        writer = csv.writer(fh)
-        writer.writerow(["source", "source_dive_id"] + columns)
-        for source, e in source_logs(dive):
-            samples = e["samples"]
-            n = len(samples.get("t_s", []))
-            for i in range(n):
-                writer.writerow(
-                    [source, e["source_dive_id"]]
-                    + [
-                        samples[c][i] if c in samples else None
-                        for c in columns
-                    ]
-                )
+        write_dive_csv(dive, fh)
     finally:
         if out:
             fh.close()
@@ -293,8 +275,19 @@ def main(argv: list[str] | None = None) -> int:
     p_plot.add_argument("-o", "--out", type=Path, default=None,
                         help="write an image instead of opening a window")
 
+    p_app = sub.add_parser("app", help="open the desktop app (pip install 'bottomtime[app]')")
+    p_app.add_argument("--browser", action="store_true", help="show it in a browser tab instead")
+    p_app.add_argument("--data-dir", type=Path, default=None,
+                       help="where the app keeps its store (default: the app data folder)")
+
     args = parser.parse_args(argv)
     archive_dir = Path(args.archive)
+    if args.command == "app":
+        from .app import run
+
+        if args.data_dir:
+            args.data_dir.mkdir(parents=True, exist_ok=True)
+        return run(browser=args.browser, home=args.data_dir)
     if args.command == "rebuild":
         return _cmd_rebuild(Path(args.db), archive_dir)
     con = store_db.connect(args.db)

@@ -48,6 +48,40 @@ bottomtime keeps everything:
 Everything lands in a single SQLite file with a stable schema, ready for SQL,
 pandas, or whatever you analyze with.
 
+## The Mac app
+
+If you'd rather not use a terminal, bottomtime is also a Mac app.
+
+1. Download `bottomtime-mac.zip` from the
+   [latest release](https://github.com/snehankekre/bottomtime/releases/latest),
+   unzip it, and drag `bottomtime` into Applications. It runs on Apple silicon
+   Macs (M1 and later).
+2. Open it. macOS will say it can't check the app for malicious software,
+   because the app isn't notarized by Apple. Open System Settings, go to
+   Privacy & Security, scroll down to the message about bottomtime, and click
+   Open Anyway. You only do this once.
+3. Click **Read Shearwater Cloud** if you use Shearwater's desktop app (sync it
+   with your computer first), and **Garmin Connect** to sign in and download
+   your Garmin dives. Your Garmin password goes only to Garmin. You can also
+   add `.fit` files or a Shearwater Cloud database export by hand.
+
+The app lists every dive with its runtime, max depth, deco time, GF99, and
+CNS, sorts and filters them, and charts any of those across your dives. Open a
+dive and every computer you wore is on one timeline: depth, the Shearwater's
+deco ceiling, GF99, and ppO2, with a readout of each computer at the same
+moment. **Export all** saves every dive as CSV in a zip file, so your data
+stays readable without bottomtime or the manufacturers' apps.
+
+Everything stays on your Mac, in `~/Library/Application Support/bottomtime`.
+The Garmin download uses Garmin Connect's unofficial API, through
+[garminconnect](https://github.com/cyberjunky/python-garminconnect), so it can
+break when Garmin changes something. Adding `.fit` files by hand still works
+when it does.
+
+To run it from source, `pip install 'bottomtime[app]'` and `bottomtime app`
+(`--browser` shows it in a browser tab). `packaging/build_mac_app.sh` builds
+the `.app`.
+
 ## Install
 
 ```sh

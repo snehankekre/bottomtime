@@ -116,15 +116,16 @@ def _ingest_log(
     }
 
     cur = con.execute(
-        "INSERT INTO source_dives (source, artifact_id, source_key, device, content_hash,"
-        " decoder_version, start_time_utc, start_time_local, utc_offset_min,"
-        " duration_s, max_depth_m, avg_depth_m, sample_interval_ms, mode,"
-        " header_json, raw_blob)"
-        " VALUES ('shearwater',?,?,?,?,?,NULL,?,NULL,?,?,?,?,?,?,?)",
+        "INSERT INTO source_dives (source, artifact_id, source_key, device, model,"
+        " content_hash, decoder_version, start_time_utc, start_time_local,"
+        " utc_offset_min, duration_s, max_depth_m, avg_depth_m, sample_interval_ms,"
+        " mode, header_json, raw_blob)"
+        " VALUES ('shearwater',?,?,?,?,?,?,NULL,?,NULL,?,?,?,?,?,?,?)",
         (
             artifact_id,
             source_key,
             f"shearwater:{dive.header['computer_serial']:08X}",
+            dive.header.get("computer_model"),
             digest,
             DECODER_VERSION,
             start_local,

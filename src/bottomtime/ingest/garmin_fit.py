@@ -20,6 +20,7 @@ from pathlib import Path
 
 from garmin_fit_sdk import Decoder, Stream
 
+from ..api import computer_info
 from ..store.db import source_dive_exists
 from .archive import archive_file
 
@@ -163,14 +164,16 @@ def ingest_fit_file(
     interval_ms = int(sorted(intervals)[len(intervals) // 2] * 1000) if intervals else None
 
     cur = con.execute(
-        "INSERT INTO source_dives (source, artifact_id, source_key, device, content_hash,"
-        " decoder_version, start_time_utc, start_time_local, utc_offset_min,"
-        " duration_s, max_depth_m, avg_depth_m, sample_interval_ms, mode, header_json)"
-        " VALUES ('garmin',?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO source_dives (source, artifact_id, source_key, device, model,"
+        " content_hash, decoder_version, start_time_utc, start_time_local,"
+        " utc_offset_min, duration_s, max_depth_m, avg_depth_m, sample_interval_ms,"
+        " mode, header_json)"
+        " VALUES ('garmin',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             artifact_id,
             activity_id,
             f"garmin:{file_id.get('serial_number')}",
+            computer_info("garmin", header)["model"],
             digest,
             DECODER_VERSION,
             start_utc,
