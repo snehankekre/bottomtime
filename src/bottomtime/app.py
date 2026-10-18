@@ -73,8 +73,14 @@ class Api:
 
     def overview(self) -> dict:
         cloud = find_shearwater_cloud()
+        con = sqlite3.connect(self._db)
+        computers = con.execute(
+            "SELECT count(DISTINCT device) FROM source_dives WHERE device NOT LIKE '%:None'"
+        ).fetchone()[0]
+        con.close()
         return {
             "dives": dive_summaries(self._db),
+            "computers": computers,
             "shearwater_cloud": str(cloud) if cloud else None,
             "garmin_signed_in": (self._garmin_tokens / "garmin_tokens.json").exists(),
             "data_dir": str(self._home),
@@ -266,7 +272,14 @@ class Api:
             "SELECT source_key, start_time_utc FROM source_dives WHERE source='garmin'"
         ):
             have |= {key, start}
-        todo = [d for d in dives if not {str(d["activityId"]), d.get("startTimeGMT")} & have]
+        # Skip copies of other computers' dives that Garmin's dive log import
+        # tool made; bottomtime reads those computers directly.
+        todo = [
+            d
+            for d in dives
+            if d.get("manufacturer", "GARMIN") == "GARMIN"
+            and not {str(d["activityId"]), d.get("startTimeGMT")} & have
+        ]
         with tempfile.TemporaryDirectory() as tmp:
             index_path = Path(tmp) / "dives_index.json"
             index_path.write_text(json.dumps(dives, separators=(",", ":")))

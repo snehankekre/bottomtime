@@ -609,8 +609,8 @@ function renderPanels() {
 async function refresh() {
   overview = await call("overview");
   const n = overview.dives.filter((d) => !d.is_test).length;
-  const computers = new Set(overview.dives.flatMap((d) => d.computers));
-  $("count").textContent = overview.dives.length ? `${n} dives · ${computers.size} computer${computers.size === 1 ? "" : "s"}` : "";
+  const c = overview.computers;
+  $("count").textContent = overview.dives.length ? `${n} dives · ${c} computer${c === 1 ? "" : "s"}` : "";
   for (const id of ["btn-cloud", "empty-btn-cloud"]) {
     const b = $(id);
     b.dataset.off = overview.shearwater_cloud ? "0" : "1";

@@ -93,6 +93,12 @@ def ingest_fit_file(
     if errors:
         raise ValueError(f"FIT decode errors in {path.name}: {errors}")
 
+    # Garmin Connect also hands out files it built from other computers' logs
+    # (its dive log import tool). bottomtime reads those computers directly,
+    # with every channel the import dropped, so a copy would be a duplicate.
+    if (messages.get("file_id_mesgs") or [{}])[0].get("manufacturer") != "garmin":
+        return "skipped"
+
     records = messages.get("record_mesgs", [])
     # A file can carry summaries but no sample stream (rare device hiccup);
     # keep it as a header-only source dive rather than losing the dive.

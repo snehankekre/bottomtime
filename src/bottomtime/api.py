@@ -24,6 +24,8 @@ def computer_info(source: str, header: dict) -> dict:
         file_id = (header.get("file_id_mesgs") or [{}])[0]
         product = file_id.get("garmin_product") or file_id.get("product_name")
         model = str(product).replace("_", " ").title() if product else None
+        if product == "connect":
+            model = "Entered by hand in Garmin Connect"
         firmware = next(
             (
                 d.get("software_version")

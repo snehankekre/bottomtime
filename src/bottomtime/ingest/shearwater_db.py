@@ -35,7 +35,7 @@ def _details_row(con: sqlite3.Connection, dive_id: str) -> dict:
 def ingest_shearwater_db(
     con: sqlite3.Connection, archive_dir: Path, db_path: Path
 ) -> dict:
-    archive_file(con, archive_dir, "shearwater_db", db_path)
+    artifact_id, _ = archive_file(con, archive_dir, "shearwater_db", db_path)
 
     src = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     src.row_factory = sqlite3.Row
@@ -46,12 +46,6 @@ def ingest_shearwater_db(
         " calculated_values_from_samples, data_bytes_1, data_bytes_2, data_bytes_3"
         " FROM log_data"
     ).fetchall()
-
-    artifact_id = con.execute(
-        "SELECT id FROM raw_artifacts WHERE kind='shearwater_db' AND original_path=?"
-        " ORDER BY id DESC LIMIT 1",
-        (str(db_path),),
-    ).fetchone()[0]
 
     for row in rows:
         try:
