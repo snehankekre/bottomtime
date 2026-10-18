@@ -11,7 +11,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-_SAMPLE_TABLES = {"garmin": "garmin_samples", "shearwater": "shearwater_samples"}
+from .store.schema import SOURCES
 
 
 def computer_info(source: str, header: dict) -> dict:
@@ -63,13 +63,13 @@ def load_dive(db_path: str | Path, dive_number: int) -> dict:
         out = {k: dive[k] for k in dive.keys()}
         out["sources"] = {}
         members = con.execute(
-            "SELECT sd.* FROM source_dives sd JOIN dive_members dm"
+            "SELECT sd.*, dm.offset_s FROM source_dives sd JOIN dive_members dm"
             " ON dm.source_dive_id = sd.id WHERE dm.dive_id=?"
-            " ORDER BY sd.start_time_local",
+            " ORDER BY dm.offset_s",
             (dive["id"],),
         ).fetchall()
         for sd in members:
-            table = _SAMPLE_TABLES[sd["source"]]
+            table = SOURCES[sd["source"]]["samples"]
             cols = [c for c in _columns_of(con, table) if c != "source_dive_id"]
             rows = con.execute(
                 f"SELECT {', '.join(cols)} FROM {table}"
@@ -81,6 +81,9 @@ def load_dive(db_path: str | Path, dive_number: int) -> dict:
             entry = {
                 "source_dive_id": sd["id"],
                 "source_key": sd["source_key"],
+                "device": sd["device"],
+                # Seconds from the dive's start to this log's t_s = 0.
+                "offset_s": sd["offset_s"],
                 "start_time_utc": sd["start_time_utc"],
                 "start_time_local": sd["start_time_local"],
                 "duration_s": sd["duration_s"],
@@ -112,11 +115,11 @@ def load_dive(db_path: str | Path, dive_number: int) -> dict:
         out["matches"] = [
             {k: m[k] for k in m.keys()}
             for m in con.execute(
-                "SELECT m.garmin_source_dive_id, m.shearwater_source_dive_id,"
+                "SELECT m.a_source_dive_id, m.b_source_dive_id,"
                 " m.clock_offset_s, m.residual_skew_s, m.xcorr_score,"
                 " m.duration_delta_s, m.max_depth_delta_m, m.method, m.status"
                 " FROM matches m JOIN dive_members dm"
-                " ON dm.source_dive_id = m.garmin_source_dive_id"
+                " ON dm.source_dive_id = m.a_source_dive_id"
                 " WHERE dm.dive_id=? AND m.status IN ('auto','confirmed')",
                 (dive["id"],),
             )

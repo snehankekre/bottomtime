@@ -163,13 +163,14 @@ def ingest_fit_file(
     interval_ms = int(sorted(intervals)[len(intervals) // 2] * 1000) if intervals else None
 
     cur = con.execute(
-        "INSERT INTO source_dives (source, artifact_id, source_key, content_hash,"
+        "INSERT INTO source_dives (source, artifact_id, source_key, device, content_hash,"
         " decoder_version, start_time_utc, start_time_local, utc_offset_min,"
         " duration_s, max_depth_m, avg_depth_m, sample_interval_ms, mode, header_json)"
-        " VALUES ('garmin',?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " VALUES ('garmin',?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             artifact_id,
             activity_id,
+            f"garmin:{file_id.get('serial_number')}",
             digest,
             DECODER_VERSION,
             start_utc,

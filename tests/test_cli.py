@@ -30,19 +30,19 @@ def store(tmp_path):
             " archive_path, imported_at) VALUES (1,'fit','x',1,'a','b','now')"
         )
         con.execute(
-            "INSERT INTO source_dives (id, source, artifact_id, source_key,"
+            "INSERT INTO source_dives (id, source, artifact_id, source_key, device,"
             " content_hash, decoder_version, start_time_utc, start_time_local,"
             " utc_offset_min, duration_s, max_depth_m, sample_interval_ms, mode,"
-            " header_json) VALUES (1,'garmin',1,'act1','h1','garmin-fit-sdk 21',"
+            " header_json) VALUES (1,'garmin',1,'act1','garmin:12345','h1','garmin-fit-sdk 21',"
             " '2026-07-06 03:47:01','2026-07-06 11:47:01',480,120,20.0,1000,"
             " 'multi_gas_diving',?)",
             (json.dumps(GARMIN_HEADER),),
         )
         con.execute(
-            "INSERT INTO source_dives (id, source, artifact_id, source_key,"
+            "INSERT INTO source_dives (id, source, artifact_id, source_key, device,"
             " content_hash, decoder_version, start_time_utc, start_time_local,"
             " utc_offset_min, duration_s, max_depth_m, sample_interval_ms, mode,"
-            " header_json) VALUES (2,'shearwater',1,'A823C228#1','h2','pnf 0.2.0',"
+            " header_json) VALUES (2,'shearwater',1,'A823C228#1','shearwater:A823C228','h2','pnf 0.2.0',"
             " '2026-07-06 03:43:52','2026-07-06 11:43:52',480,110,20.2,10000,"
             " 'oc_tec',?)",
             (json.dumps(SHEARWATER_HEADER),),
@@ -65,7 +65,7 @@ def store(tmp_path):
             " VALUES (2, 0, 'pnf_info_event', '{}')"
         )
         con.execute(
-            "INSERT INTO matches (garmin_source_dive_id, shearwater_source_dive_id,"
+            "INSERT INTO matches (a_source_dive_id, b_source_dive_id,"
             " clock_offset_s, residual_skew_s, xcorr_score, duration_delta_s,"
             " max_depth_delta_m, method, status, matched_at)"
             " VALUES (1, 2, 28800, 190.0, 0.999, 10, 0.2, 'test', 'auto', 'now')"
@@ -80,9 +80,11 @@ def store(tmp_path):
             " duration_s, max_depth_m, is_test) VALUES"
             " (2, NULL, '2026-07-06 05:00:00', 480, 30, 1.0, 1)"
         )
+        # The Perdix started 189 s before the Garmin and its clock runs 190 s
+        # behind once the zone is removed, so it lines up 1 s after the start.
         con.executemany(
-            "INSERT INTO dive_members (dive_id, source_dive_id) VALUES (?,?)",
-            [(1, 1), (1, 2)],
+            "INSERT INTO dive_members (dive_id, source_dive_id, offset_s) VALUES (?,?,?)",
+            [(1, 1, 0.0), (1, 2, 1.0)],
         )
     con.close()
     return db_path
@@ -151,10 +153,9 @@ def test_old_schema_asks_for_a_rebuild(store):
         store_db.connect(store)
 
 
-def test_aligned_series_applies_clock_offset_and_skew(store):
+def test_aligned_series_uses_stored_member_offsets(store):
     dive = load_dive(store, 1)
     series = {s["source"]: s for s in aligned_series(dive)}
     assert series["garmin"]["x"][0] == 0.0
-    # shearwater start_utc is 189 s before the dive start; +190 s skew -> +1 s
     assert series["shearwater"]["x"][0] == pytest.approx(1.0)
     assert series["shearwater"]["label"] == "Perdix 2"

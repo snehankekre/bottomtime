@@ -162,8 +162,7 @@ def _cmd_show(db_path: str, dive_number: int) -> int:
             else "?"
         )
         print(
-            f"\n  match garmin#{m['garmin_source_dive_id']} <-> "
-            f"shearwater#{m['shearwater_source_dive_id']}: "
+            f"\n  match #{m['a_source_dive_id']} <-> #{m['b_source_dive_id']}: "
             f"clock offset {m['clock_offset_s']:+d} s, xcorr {score}, "
             f"residual skew {skew}, depth delta {delta} ({m['status']})"
         )

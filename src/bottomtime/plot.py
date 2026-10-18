@@ -7,14 +7,9 @@ matplotlib is an optional dependency: pip install 'bottomtime[plot]'.
 
 from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
 
 from .api import load_dive, source_logs
-
-
-def _parse(ts: str) -> datetime:
-    return datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
 
 
 def _nan(values: list) -> list[float]:
@@ -27,20 +22,10 @@ def _has(entry: dict, channel: str) -> bool:
 
 def aligned_series(dive: dict) -> list[dict]:
     """One dict per source log: label plus x (seconds since the canonical
-    dive's start). Alignment uses each log's backfilled UTC start plus, for
-    Shearwater logs, the matcher's residual clock skew (the wall clock's
-    error beyond the whole-hour zone offset)."""
-    t0 = _parse(dive["start_time_utc"])
-    skew = {
-        m["shearwater_source_dive_id"]: m["residual_skew_s"] or 0.0
-        for m in dive.get("matches", [])
-    }
+    dive's start), using the offset the matcher stored for each log."""
     out = []
     for source, entry in source_logs(dive):
-        start = entry["start_time_utc"] or dive["start_time_utc"]
-        base = (_parse(start) - t0).total_seconds()
-        if source == "shearwater":
-            base += skew.get(entry["source_dive_id"], 0.0)
+        base = entry["offset_s"]
         model = entry["computer"].get("model") or source
         out.append(
             {

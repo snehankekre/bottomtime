@@ -8,11 +8,23 @@ Design principles:
 - Anything not understood is preserved in undecoded_payloads.
 - The database is disposable. When the schema or a decoder changes,
   `bottomtime rebuild` re-ingests everything from the archive.
-- matches links two source dives that recorded the same physical dive;
-  dives is the canonical entity built from matches + singletons.
+- matches links two source dives, from different devices, that recorded the
+  same physical dive; dives is the canonical entity built from matches +
+  singletons.
+- Adding a computer type means a samples table, an ingest module, and an
+  entry in SOURCES.
 """
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+
+# Every source kind: its samples table, and what its start time means. 'utc'
+# logs carry true UTC (Garmin). 'local' logs carry a wall clock with no zone
+# (Shearwater), so their UTC comes from a match or from the diver's usual
+# offset.
+SOURCES = {
+    "garmin": {"samples": "garmin_samples", "clock": "utc"},
+    "shearwater": {"samples": "shearwater_samples", "clock": "local"},
+}
 
 DDL = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -35,9 +47,10 @@ CREATE TABLE IF NOT EXISTS source_dives (
   source TEXT NOT NULL,            -- 'garmin' | 'shearwater'
   artifact_id INTEGER NOT NULL REFERENCES raw_artifacts(id),
   source_key TEXT NOT NULL,        -- garmin activityId | shearwater '<serial>#<diveNumber>'
+  device TEXT NOT NULL,            -- '<source>:<serial>', one per physical computer
   content_hash TEXT NOT NULL,
   decoder_version TEXT NOT NULL,   -- package that decoded it, e.g. 'pnf 0.2.0' 
-  start_time_utc TEXT,             -- shearwater: NULL until matcher backfills
+  start_time_utc TEXT,             -- 'local' clocks: NULL until a match gives the offset
   start_time_local TEXT NOT NULL,
   utc_offset_min INTEGER,
   duration_s REAL,
@@ -156,17 +169,17 @@ CREATE TABLE IF NOT EXISTS undecoded_payloads (
 
 CREATE TABLE IF NOT EXISTS matches (
   id INTEGER PRIMARY KEY,
-  garmin_source_dive_id INTEGER NOT NULL REFERENCES source_dives(id),
-  shearwater_source_dive_id INTEGER NOT NULL REFERENCES source_dives(id),
-  clock_offset_s INTEGER NOT NULL, -- shearwater wall clock -> true UTC
-  residual_skew_s REAL,
+  a_source_dive_id INTEGER NOT NULL REFERENCES source_dives(id),
+  b_source_dive_id INTEGER NOT NULL REFERENCES source_dives(id),
+  clock_offset_s INTEGER NOT NULL, -- b's wall clock minus this = a's clock (0 on a shared clock)
+  residual_skew_s REAL,            -- seconds to add to b, after the offset, to line up with a
   xcorr_score REAL,
   duration_delta_s REAL,
   max_depth_delta_m REAL,
   method TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'auto',  -- 'auto' | 'confirmed' | 'rejected'
   matched_at TEXT NOT NULL,
-  UNIQUE (garmin_source_dive_id, shearwater_source_dive_id)
+  UNIQUE (a_source_dive_id, b_source_dive_id)
 );
 
 CREATE TABLE IF NOT EXISTS dives (
@@ -182,6 +195,7 @@ CREATE TABLE IF NOT EXISTS dives (
 CREATE TABLE IF NOT EXISTS dive_members (
   dive_id INTEGER NOT NULL REFERENCES dives(id),
   source_dive_id INTEGER NOT NULL REFERENCES source_dives(id) UNIQUE,
+  offset_s REAL NOT NULL DEFAULT 0, -- this log's t_s=0, in seconds after the dive's start
   PRIMARY KEY (dive_id, source_dive_id)
 );
 

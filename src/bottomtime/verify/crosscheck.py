@@ -5,8 +5,8 @@
    decoder byte offsets.
 2. gf99 sanity: max gf99 near surfacing must agree with Shearwater's own
    EndGF99; ceiling must never exceed the (3 m-quantized) stop depth.
-3. Twin-dive agreement: matched Garmin/Shearwater series must show the same
-   depth profile after clock offset + residual skew correction.
+3. Twin-dive agreement: every pair of matched logs must show the same depth
+   profile once lined up with the offsets stored on dive_members.
 4. Counts and referential integrity.
 """
 
@@ -15,10 +15,10 @@ from __future__ import annotations
 import bisect
 import json
 import sqlite3
-from datetime import datetime
 from pathlib import Path
 
 from ..ingest.shearwater_xml import load_xml_dir
+from ..store.schema import SOURCES
 
 TOL = {
     "depth_m": 0.051,
@@ -136,34 +136,32 @@ def check_gf99(con: sqlite3.Connection, failures: list) -> None:
 
 def check_twins(con: sqlite3.Connection, failures: list) -> None:
     matches = con.execute(
-        "SELECT m.garmin_source_dive_id AS g, m.shearwater_source_dive_id AS s,"
-        " m.clock_offset_s, m.residual_skew_s, m.xcorr_score"
-        " FROM matches m WHERE m.status IN ('auto','confirmed')"
+        "SELECT m.a_source_dive_id AS g, m.b_source_dive_id AS s, m.xcorr_score,"
+        " a.source AS a_source, b.source AS b_source,"
+        " da.offset_s AS a_offset, db.offset_s AS b_offset"
+        " FROM matches m"
+        " JOIN source_dives a ON a.id = m.a_source_dive_id"
+        " JOIN source_dives b ON b.id = m.b_source_dive_id"
+        " JOIN dive_members da ON da.source_dive_id = m.a_source_dive_id"
+        " JOIN dive_members db ON db.source_dive_id = m.b_source_dive_id"
+        " WHERE m.status IN ('auto','confirmed')"
     ).fetchall()
     medians = []
     for m in matches:
         g_rows = con.execute(
-            "SELECT t_s, depth_m FROM garmin_samples WHERE source_dive_id=?"
-            " AND depth_m IS NOT NULL ORDER BY t_s",
+            f"SELECT t_s, depth_m FROM {SOURCES[m['a_source']]['samples']}"
+            " WHERE source_dive_id=? AND depth_m IS NOT NULL ORDER BY t_s",
             (m["g"],),
         ).fetchall()
         s_rows = con.execute(
-            "SELECT t_s, depth_m FROM shearwater_samples WHERE source_dive_id=?"
-            " AND depth_m IS NOT NULL ORDER BY t_s",
+            f"SELECT t_s, depth_m FROM {SOURCES[m['b_source']]['samples']}"
+            " WHERE source_dive_id=? AND depth_m IS NOT NULL ORDER BY t_s",
             (m["s"],),
         ).fetchall()
-        g_start = con.execute(
-            "SELECT start_time_utc FROM source_dives WHERE id=?", (m["g"],)
-        ).fetchone()[0]
-        s_start = con.execute(
-            "SELECT start_time_utc FROM source_dives WHERE id=?", (m["s"],)
-        ).fetchone()[0]
-        if not g_rows or not s_rows or s_start is None:
+        if not g_rows or not s_rows:
             continue
-        fmt = "%Y-%m-%d %H:%M:%S"
-        base_delta = (
-            datetime.strptime(s_start, fmt) - datetime.strptime(g_start, fmt)
-        ).total_seconds() + (m["residual_skew_s"] or 0)
+        # The offsets the store gives the display, so this checks those too.
+        base_delta = m["b_offset"] - m["a_offset"]
 
         g_times = [r[0] for r in g_rows]
         g_depths = [r[1] for r in g_rows]
@@ -191,7 +189,7 @@ def check_twins(con: sqlite3.Connection, failures: list) -> None:
         if median > max(0.6, 0.045 * max_depth):
             _fail(
                 failures,
-                f"match g={m['g']} s={m['s']}: median depth delta {median:.2f} m"
+                f"match a={m['g']} b={m['s']}: median depth delta {median:.2f} m"
                 f" at max depth {max_depth:.1f} m (score {m['xcorr_score']})",
             )
     if medians:

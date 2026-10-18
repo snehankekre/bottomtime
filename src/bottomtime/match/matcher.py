@@ -1,30 +1,39 @@
-"""Match Shearwater dives to Garmin dives and build canonical dive rows.
+"""Match logs of the same dive across computers and build canonical dives.
 
-A Shearwater log's clock is a local wall clock with no zone; Garmin supplies
-true UTC plus the local offset. For each Shearwater dive we try the UTC
-offsets observed on Garmin dives nearby in calendar time, look for interval
-overlap, and confirm with depth-profile cross-correlation computed over the
-overlapping window.
+Each source kind declares its clock in store.schema.SOURCES. Garmin logs carry
+true UTC; Shearwater logs carry a wall clock with no zone. Two logs from
+different devices are compared on a shared clock: both on UTC, both on the
+wall clock, or a wall-clock log shifted by each UTC offset that UTC logs
+recorded nearby. Interval overlap proposes a pair and depth-profile
+cross-correlation accepts it. Flat pool profiles, where correlation is noise,
+are accepted instead on near-total overlap plus same-body depth agreement.
 
 Two realities this must handle (observed in real data):
-- The two computers segment differently: a Garmin activity may span several
-  Shearwater logs (pool sessions, drills), so one Garmin dive may match many
-  Shearwater dives as long as their intervals don't collide.
+- Computers segment differently: a Garmin activity may span several
+  Shearwater logs (pool sessions, drills), so one log may match several logs
+  from another device as long as those don't collide in time.
 - Recorded durations differ systematically (the Descent keeps logging through
-  surface pauses), so duration agreement is evidence, never a hard gate.
+  surface pauses), so duration agreement is never evidence.
 
-Matching is non-destructive: both sample series are kept; links (with clock
-offset and residual skew) live in `matches`, and canonical dives are the
-connected components of those links.
+In each pair, `a` is the log the other is lined up against: the UTC log when
+only one has UTC, otherwise the longer one. `b` takes at most one partner per
+device of `a`; `a` may take several from one device if they don't overlap.
+
+Matching is non-destructive: every sample series stays as recorded. Links
+(clock offset and residual skew) live in `matches`; canonical dives are the
+connected components of those links, and each member's offset from the dive's
+start is stored on dive_members, so a display can line the logs up without
+resampling either.
 """
 
 from __future__ import annotations
 
 import sqlite3
-from collections import Counter
-from datetime import datetime, timedelta
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta, timezone
 
 from ..store.db import utcnow
+from ..store.schema import SOURCES
 from .correlate import best_lag, median_abs_delta
 
 TEST_MAX_DURATION_S = 120
@@ -36,22 +45,16 @@ XCORR_ACCEPT = 0.95
 DELTA_OVERLAP_MIN = 0.85
 DELTA_ACCEPT_M = 0.75
 AMBIGUITY_MARGIN = 0.02
+NEAR = timedelta(days=2)
+FMT = "%Y-%m-%d %H:%M:%S"
 
 
 def _dt(s: str) -> datetime:
-    return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+    return datetime.strptime(s, FMT)
 
 
 def _is_test(duration_s, max_depth_m) -> bool:
     return (duration_s or 0) < TEST_MAX_DURATION_S or (max_depth_m or 0) < TEST_MAX_DEPTH_M
-
-
-def _depth_series(con: sqlite3.Connection, table: str, dive_id: int, t_base: float):
-    rows = con.execute(
-        f"SELECT t_s, depth_m FROM {table} WHERE source_dive_id=? AND depth_m IS NOT NULL ORDER BY t_s",
-        (dive_id,),
-    ).fetchall()
-    return [(t_base + r[0], r[1]) for r in rows]
 
 
 def _overlap_fraction(a_start, a_dur, b_start, b_dur) -> float:
@@ -62,169 +65,137 @@ def _overlap_fraction(a_start, a_dur, b_start, b_dur) -> float:
     return max(overlap, 0.0) / shorter
 
 
+def _own_start(log: dict) -> datetime:
+    return log["utc"] if log["utc_clock"] else log["wall"]
+
+
 def run_match(con: sqlite3.Connection, verbose: bool = True) -> dict:
-    garmin = [
+    logs = [
         dict(r)
         for r in con.execute(
-            "SELECT id, start_time_utc, start_time_local, utc_offset_min, duration_s,"
-            " max_depth_m FROM source_dives WHERE source='garmin'"
+            "SELECT id, source, device, start_time_utc, start_time_local,"
+            " utc_offset_min, duration_s, max_depth_m FROM source_dives"
+            " ORDER BY start_time_local, id"
         )
     ]
-    shearwater = [
-        dict(r)
-        for r in con.execute(
-            "SELECT id, start_time_local, duration_s, max_depth_m"
-            " FROM source_dives WHERE source='shearwater'"
-        )
-    ]
+    for d in logs:
+        d["utc_clock"] = SOURCES[d["source"]]["clock"] == "utc"
+        d["wall"] = _dt(d["start_time_local"])
+        d["utc"] = _dt(d["start_time_utc"]) if d["utc_clock"] else None
+        d["test"] = _is_test(d["duration_s"], d["max_depth_m"])
 
-    for g in garmin:
-        g["start_utc_dt"] = _dt(g["start_time_utc"])
-        g["start_local_dt"] = _dt(g["start_time_local"])
-        g["test"] = _is_test(g["duration_s"], g["max_depth_m"])
-    for s in shearwater:
-        s["wall_dt"] = _dt(s["start_time_local"])
-        s["test"] = _is_test(s["duration_s"], s["max_depth_m"])
-
-    # Fallback for a Shearwater dive with no Garmin dive near it in time: the
-    # offset the diver's Garmin logged most often, else UTC.
-    seen = Counter(g["utc_offset_min"] for g in garmin if g["utc_offset_min"] is not None)
+    # Fallback offset for a wall-clock log with no UTC log near it in time: the
+    # offset the diver's UTC logs recorded most often, else UTC itself.
+    seen = Counter(
+        d["utc_offset_min"] for d in logs if d["utc_clock"] and d["utc_offset_min"] is not None
+    )
     default_offset = seen.most_common(1)[0][0] if seen else 0
 
-    candidates: dict[int, list[dict]] = {}
-    for s in shearwater:
-        if s["test"]:
-            continue
-        offsets = {
-            g["utc_offset_min"]
-            for g in garmin
-            if g["utc_offset_min"] is not None
-            and abs((g["start_local_dt"] - s["wall_dt"]).total_seconds()) < 2 * 86400
+    def offsets_near(f: dict) -> set[int]:
+        found = {
+            d["utc_offset_min"]
+            for d in logs
+            if d["utc_clock"]
+            and d["utc_offset_min"] is not None
+            and abs(d["wall"] - f["wall"]) < NEAR
         }
-        offsets.add(default_offset)
-        found = []
-        for offset in offsets:
-            s_utc = s["wall_dt"] - timedelta(minutes=offset)
-            for g in garmin:
-                if g["test"]:
-                    continue
-                frac = _overlap_fraction(
-                    g["start_utc_dt"], g["duration_s"], s_utc, s["duration_s"]
-                )
-                if frac < MIN_OVERLAP_FRACTION:
-                    continue
-                # The shorter log cannot be meaningfully deeper than the longer.
-                if (s["duration_s"] or 0) <= (g["duration_s"] or 0):
-                    shallower, deeper = s["max_depth_m"], g["max_depth_m"]
-                else:
-                    shallower, deeper = g["max_depth_m"], s["max_depth_m"]
-                if (shallower or 0) > (deeper or 0) * 1.05 + 1.0:
-                    continue
+        return found | {default_offset}
 
-                g_series = _depth_series(
-                    con, "garmin_samples", g["id"], g["start_utc_dt"].timestamp()
-                )
-                s_series = _depth_series(
-                    con, "shearwater_samples", s["id"], s_utc.timestamp()
-                )
-                lag, score = best_lag(g_series, s_series)
-                accepted_by = None
-                if score >= XCORR_ACCEPT:
-                    accepted_by = "profile"
-                elif frac >= DELTA_OVERLAP_MIN:
-                    delta = median_abs_delta(g_series, s_series, lag)
-                    if delta is not None and delta <= DELTA_ACCEPT_M:
-                        accepted_by = f"depth-delta={delta:.2f}"
-                if accepted_by:
-                    found.append(
-                        {
-                            "garmin": g,
-                            "offset_min": offset,
-                            "lag_s": lag,
-                            "score": score,
-                            "accepted_by": accepted_by,
-                            "overlap": frac,
-                            "dur_delta": abs(
-                                (g["duration_s"] or 0) - (s["duration_s"] or 0)
-                            ),
-                            "depth_delta": abs(
-                                (g["max_depth_m"] or 0) - (s["max_depth_m"] or 0)
-                            ),
-                            "s_utc": s_utc,
-                        }
-                    )
-        candidates[s["id"]] = sorted(found, key=lambda c: -c["score"])
+    depths: dict[int, list] = {}
+
+    def series(log: dict, start: datetime) -> list[tuple[float, float]]:
+        if log["id"] not in depths:
+            table = SOURCES[log["source"]]["samples"]
+            depths[log["id"]] = con.execute(
+                f"SELECT t_s, depth_m FROM {table}"
+                " WHERE source_dive_id=? AND depth_m IS NOT NULL ORDER BY t_s",
+                (log["id"],),
+            ).fetchall()
+        base = start.replace(tzinfo=timezone.utc).timestamp()
+        return [(base + t, v) for t, v in depths[log["id"]]]
+
+    real = [d for d in logs if not d["test"]]
+    found = []
+    for i, x in enumerate(real):
+        for y in real[i + 1 :]:
+            if y["wall"] - x["wall"] >= NEAR:
+                break
+            if x["device"] == y["device"]:
+                continue
+            if x["utc_clock"] != y["utc_clock"]:
+                a, b = (x, y) if x["utc_clock"] else (y, x)
+                options = [
+                    (off * 60, a["utc"], b["wall"] - timedelta(minutes=off))
+                    for off in offsets_near(b)
+                ]
+            else:
+                a, b = (x, y) if (x["duration_s"] or 0) >= (y["duration_s"] or 0) else (y, x)
+                options = [(0, _own_start(a), _own_start(b))]
+            for offset_s, a_start, b_start in options:
+                c = _evaluate(a, b, a_start, b_start, series)
+                if c:
+                    c["offset_s"] = offset_s
+                    found.append(c)
 
     rejected = {
         (r[0], r[1])
         for r in con.execute(
-            "SELECT garmin_source_dive_id, shearwater_source_dive_id FROM matches"
-            " WHERE status='rejected'"
+            "SELECT a_source_dive_id, b_source_dive_id FROM matches WHERE status='rejected'"
         )
     }
-    confirmed_s = {
-        r[0]
+    by_id = {d["id"]: d for d in logs}
+    taken = {
+        (r[0], by_id[r[1]]["device"])
         for r in con.execute(
-            "SELECT shearwater_source_dive_id FROM matches WHERE status='confirmed'"
+            "SELECT b_source_dive_id, a_source_dive_id FROM matches WHERE status='confirmed'"
         )
     }
 
-    # Greedy by score. A Garmin dive may take several Shearwater partners as
-    # long as their (offset-corrected) intervals don't collide.
-    all_pairs = []
-    for s_id, cands in candidates.items():
-        for c in cands:
-            all_pairs.append((c["score"], s_id, c))
-    all_pairs.sort(key=lambda x: -x[0])
+    # Greedy by score. b takes one partner per device of a; a may take several
+    # partners from one device as long as their intervals don't collide.
+    by_b: dict[tuple, list] = defaultdict(list)
+    for c in found:
+        by_b[(c["b"]["id"], c["a"]["device"])].append(c)
+    for cands in by_b.values():
+        cands.sort(key=lambda c: -c["score"])
 
-    s_by_id = {s["id"]: s for s in shearwater}
-    taken_s = set(confirmed_s)
-    garmin_partners: dict[int, list[tuple[datetime, datetime]]] = {}
-    assignments: dict[int, dict] = {}
+    partners: dict[tuple, list] = defaultdict(list)
+    assignments: list[dict] = []
     ambiguous: list[int] = []
-
-    for score, s_id, c in all_pairs:
-        if s_id in taken_s:
+    for c in sorted(found, key=lambda c: -c["score"]):
+        a, b = c["a"], c["b"]
+        key = (b["id"], a["device"])
+        if key in taken or (a["id"], b["id"]) in rejected:
             continue
-        g_id = c["garmin"]["id"]
-        if (g_id, s_id) in rejected:
-            continue
-        cands = candidates[s_id]
+        cands = by_b[key]
         if (
             len(cands) > 1
             and cands[0]["score"] - cands[1]["score"] < AMBIGUITY_MARGIN
-            and cands[0]["garmin"]["id"] != cands[1]["garmin"]["id"]
-            and s_id not in assignments
+            and cands[0]["a"]["id"] != cands[1]["a"]["id"]
         ):
-            ambiguous.append(s_id)
-            taken_s.add(s_id)
+            ambiguous.append(b["id"])
+            taken.add(key)
             continue
-        interval = (
-            c["s_utc"],
-            c["s_utc"] + timedelta(seconds=s_by_id[s_id]["duration_s"] or 0),
-        )
-        collision = any(
-            not (interval[1] <= lo or interval[0] >= hi)
-            for lo, hi in garmin_partners.get(g_id, [])
-        )
-        if collision:
+        lo = c["b_start"]
+        hi = lo + timedelta(seconds=b["duration_s"] or 0)
+        if any(not (hi <= x or lo >= y) for x, y in partners[(a["id"], b["device"])]):
             continue
-        assignments[s_id] = c
-        taken_s.add(s_id)
-        garmin_partners.setdefault(g_id, []).append(interval)
+        assignments.append(c)
+        taken.add(key)
+        partners[(a["id"], b["device"])].append((lo, hi))
 
     with con:
         con.execute("DELETE FROM matches WHERE status='auto'")
-        for s_id, c in assignments.items():
+        for c in assignments:
             con.execute(
-                "INSERT INTO matches (garmin_source_dive_id, shearwater_source_dive_id,"
+                "INSERT INTO matches (a_source_dive_id, b_source_dive_id,"
                 " clock_offset_s, residual_skew_s, xcorr_score, duration_delta_s,"
                 " max_depth_delta_m, method, status, matched_at)"
                 " VALUES (?,?,?,?,?,?,?,?,'auto',?)",
                 (
-                    c["garmin"]["id"],
-                    s_id,
-                    c["offset_min"] * 60,
+                    c["a"]["id"],
+                    c["b"]["id"],
+                    c["offset_s"],
                     c["lag_s"],
                     round(c["score"], 5),
                     c["dur_delta"],
@@ -233,70 +204,133 @@ def run_match(con: sqlite3.Connection, verbose: bool = True) -> dict:
                     utcnow(),
                 ),
             )
-        _rebuild_dives(con, garmin, shearwater, default_offset)
-        _backfill_shearwater_utc(con)
+        _rebuild_dives(con, logs, default_offset)
 
+    linked = {i for c in assignments for i in (c["a"]["id"], c["b"]["id"])}
     stats = {
         "matched": len(assignments),
         "ambiguous": len(ambiguous),
-        "shearwater_unmatched": sum(
-            1
-            for s in shearwater
-            if not s["test"] and s["id"] not in taken_s
-        ),
+        "unmatched": sum(1 for d in real if d["id"] not in linked),
     }
     if verbose and ambiguous:
-        print(f"ambiguous shearwater dives needing review: {ambiguous}")
+        print(f"ambiguous source dives needing review: {sorted(set(ambiguous))}")
     return stats
 
 
-def _rebuild_dives(con, garmin, shearwater, default_offset):
+def _evaluate(a, b, a_start, b_start, series) -> dict | None:
+    frac = _overlap_fraction(a_start, a["duration_s"], b_start, b["duration_s"])
+    if frac < MIN_OVERLAP_FRACTION:
+        return None
+    # The shorter log cannot be meaningfully deeper than the longer.
+    if (b["duration_s"] or 0) <= (a["duration_s"] or 0):
+        shallower, deeper = b["max_depth_m"], a["max_depth_m"]
+    else:
+        shallower, deeper = a["max_depth_m"], b["max_depth_m"]
+    if (shallower or 0) > (deeper or 0) * 1.05 + 1.0:
+        return None
+
+    a_series = series(a, a_start)
+    b_series = series(b, b_start)
+    lag, score = best_lag(a_series, b_series)
+    accepted_by = None
+    if score >= XCORR_ACCEPT:
+        accepted_by = "profile"
+    elif frac >= DELTA_OVERLAP_MIN:
+        delta = median_abs_delta(a_series, b_series, lag)
+        if delta is not None and delta <= DELTA_ACCEPT_M:
+            accepted_by = f"depth-delta={delta:.2f}"
+    if not accepted_by:
+        return None
+    return {
+        "a": a,
+        "b": b,
+        "b_start": b_start,
+        "lag_s": lag,
+        "score": score,
+        "accepted_by": accepted_by,
+        "overlap": frac,
+        "dur_delta": abs((a["duration_s"] or 0) - (b["duration_s"] or 0)),
+        "depth_delta": abs((a["max_depth_m"] or 0) - (b["max_depth_m"] or 0)),
+    }
+
+
+def _rebuild_dives(con, logs, default_offset):
     """Rebuild canonical dives as connected components of match links."""
     con.execute("DELETE FROM dive_members")
     con.execute("DELETE FROM dives")
+    local = tuple(s for s, spec in SOURCES.items() if spec["clock"] == "local")
+    con.execute(
+        f"UPDATE source_dives SET start_time_utc=NULL, utc_offset_min=NULL"
+        f" WHERE source IN ({','.join('?' * len(local))})",
+        local,
+    )
 
-    matches = con.execute(
-        "SELECT garmin_source_dive_id AS g, shearwater_source_dive_id AS s,"
-        " clock_offset_s FROM matches WHERE status IN ('auto','confirmed')"
-    ).fetchall()
-    s_by_id = {s["id"]: s for s in shearwater}
-
-    partners: dict[int, list] = {}
-    matched_s = {}
-    for m in matches:
-        partners.setdefault(m["g"], []).append(m)
-        matched_s[m["s"]] = m
+    by_id = {d["id"]: d for d in logs}
+    edges: dict[int, list] = defaultdict(list)
+    for m in con.execute(
+        "SELECT a_source_dive_id, b_source_dive_id, clock_offset_s, residual_skew_s"
+        " FROM matches WHERE status IN ('auto','confirmed')"
+    ):
+        a, b, offset_s, skew = m
+        a_log, b_log = by_id[a], by_id[b]
+        # Where b starts relative to a, in seconds, once lined up.
+        b_on_a = b_log["wall"] - timedelta(seconds=offset_s) if offset_s else _own_start(b_log)
+        delta = (b_on_a - _own_start(a_log)).total_seconds() + (skew or 0)
+        mixed = a_log["utc_clock"] != b_log["utc_clock"]
+        edges[a].append((b, delta, offset_s if mixed else None))
+        edges[b].append((a, -delta, offset_s if mixed else None))
 
     entries = []
-    for g in garmin:
-        members = [g["id"]] + [m["s"] for m in partners.get(g["id"], [])]
-        entries.append(
-            {
-                "start_utc": g["start_time_utc"],
-                "offset_min": g["utc_offset_min"],
-                "duration": g["duration_s"],
-                "depth": max(
-                    [g["max_depth_m"] or 0]
-                    + [s_by_id[m["s"]]["max_depth_m"] or 0 for m in partners.get(g["id"], [])]
-                ),
-                "test": g["test"],
-                "members": members,
-            }
-        )
-    default = timedelta(minutes=default_offset)
-    for s in shearwater:
-        if s["id"] in matched_s:
+    done: set[int] = set()
+    for d in logs:
+        if d["id"] in done:
             continue
+        pos = {d["id"]: 0.0}
+        zone = None  # whole-hour offset of the wall clocks, if a UTC log pins it
+        stack = [d["id"]]
+        while stack:
+            u = stack.pop()
+            for v, delta, offset_s in edges[u]:
+                if offset_s is not None:
+                    zone = offset_s
+                if v not in pos:
+                    pos[v] = pos[u] + delta
+                    stack.append(v)
+        done |= set(pos)
+        members = [by_id[i] for i in pos]
+        utc_members = [m for m in members if m["utc_clock"]]
+        anchor = (
+            min(utc_members, key=lambda m: m["utc"])
+            if utc_members
+            else max(members, key=lambda m: m["duration_s"] or 0)
+        )
+        if anchor["utc_clock"]:
+            start_utc, offset_min = anchor["utc"], anchor["utc_offset_min"]
+        else:
+            offset_min = default_offset
+            start_utc = anchor["wall"] - timedelta(minutes=offset_min)
+        base = pos[anchor["id"]]
         entries.append(
             {
-                "start_utc": (s["wall_dt"] - default).strftime("%Y-%m-%d %H:%M:%S"),
-                "offset_min": default_offset,
-                "duration": s["duration_s"],
-                "depth": s["max_depth_m"],
-                "test": s["test"],
-                "members": [s["id"]],
+                "start_utc": start_utc.strftime(FMT),
+                "offset_min": offset_min,
+                "duration": anchor["duration_s"],
+                "depth": max(m["max_depth_m"] or 0 for m in members),
+                "test": anchor["test"],
+                "members": [(m["id"], pos[m["id"]] - base) for m in members],
             }
         )
+        if zone is not None:
+            for m in members:
+                if not m["utc_clock"]:
+                    con.execute(
+                        "UPDATE source_dives SET start_time_utc=?, utc_offset_min=? WHERE id=?",
+                        (
+                            (m["wall"] - timedelta(seconds=zone)).strftime(FMT),
+                            zone // 60,
+                            m["id"],
+                        ),
+                    )
 
     entries.sort(key=lambda e: e["start_utc"])
     number = 0
@@ -315,24 +349,7 @@ def _rebuild_dives(con, garmin, shearwater, default_offset):
                 1 if e["test"] else 0,
             ),
         )
-        for member in e["members"]:
-            con.execute(
-                "INSERT INTO dive_members (dive_id, source_dive_id) VALUES (?,?)",
-                (cur.lastrowid, member),
-            )
-
-
-def _backfill_shearwater_utc(con):
-    """Set start_time_utc/utc_offset_min on matched Shearwater source dives."""
-    for m in con.execute(
-        "SELECT shearwater_source_dive_id AS s, clock_offset_s FROM matches"
-        " WHERE status IN ('auto','confirmed')"
-    ).fetchall():
-        row = con.execute(
-            "SELECT start_time_local FROM source_dives WHERE id=?", (m["s"],)
-        ).fetchone()
-        utc = _dt(row[0]) - timedelta(seconds=m["clock_offset_s"])
-        con.execute(
-            "UPDATE source_dives SET start_time_utc=?, utc_offset_min=? WHERE id=?",
-            (utc.strftime("%Y-%m-%d %H:%M:%S"), m["clock_offset_s"] // 60, m["s"]),
+        con.executemany(
+            "INSERT INTO dive_members (dive_id, source_dive_id, offset_s) VALUES (?,?,?)",
+            [(cur.lastrowid, member, offset) for member, offset in e["members"]],
         )
