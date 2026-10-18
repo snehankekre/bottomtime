@@ -1,6 +1,14 @@
 # bottomtime
 
-A lossless dive-log store for divers who log with more than one computer.
+A lossless dive-log store for divers who log with more than one computer,
+with a Mac app for divers who don't use a terminal.
+
+**[Website](https://snehankekre.com/bottomtime/)** ·
+**[Download the Mac app](https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac.zip)** ·
+**[Manual](https://snehankekre.com/bottomtime/manual.html)** ·
+**[Command line and Python](https://snehankekre.com/bottomtime/cli.html)**
+
+![A dive logged by a Garmin Descent Mk3 and a Shearwater Perdix 2, both depth profiles on one timeline with the Perdix's deco ceiling, GF99 and ppO2 below, and a readout of both computers at 18:43 into the dive](https://raw.githubusercontent.com/snehankekre/bottomtime/main/docs/images/dive.png)
 
 Tec divers often wear two dive computers (say, a Garmin Descent on one wrist
 and a Shearwater on the other). Each records the same dive differently: the
@@ -50,20 +58,23 @@ pandas, or whatever you analyze with.
 
 ## The Mac app
 
-If you'd rather not use a terminal, bottomtime is also a Mac app.
+If you'd rather not use a terminal, bottomtime is also a Mac app. It runs on
+Apple silicon Macs (M1 and later) with macOS 11 or newer, and has everything
+it needs inside it.
 
-1. Download `bottomtime-mac.zip` from the
-   [latest release](https://github.com/snehankekre/bottomtime/releases/latest),
-   unzip it, and drag `bottomtime` into Applications. It runs on Apple silicon
-   Macs (M1 and later).
-2. Open it. macOS will say it can't check the app for malicious software,
-   because the app isn't notarized by Apple. Open System Settings, go to
-   Privacy & Security, scroll down to the message about bottomtime, and click
-   Open Anyway. You only do this once.
-3. Click **Read Shearwater Cloud** if you use Shearwater's desktop app (sync it
-   with your computer first), and **Garmin Connect** to sign in and download
-   your Garmin dives. Your Garmin password goes only to Garmin. You can also
-   add `.fit` files or a Shearwater Cloud database export by hand.
+1. Download [`bottomtime-mac.zip`](https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac.zip),
+   unzip it, and drag `bottomtime` into Applications.
+2. Open it. macOS will say it can't verify the app, because the app isn't
+   notarized by Apple. Open System Settings, go to Privacy & Security, scroll
+   down to the message about bottomtime, and click Open Anyway. You only do
+   this once.
+3. Click **Read Shearwater Cloud** if you use Shearwater's desktop app (sync
+   it with your computer first), and **Garmin Connect** to sign in and
+   download your Garmin dives. Your Garmin password goes only to Garmin. You
+   can also add `.fit` files or a Shearwater Cloud database export with
+   **Add files…**.
+
+![The dive list: a chart of max depth for every dive by date, above a sortable table of dives with runtime, depth, deco, GF99, CNS, mode, and computers](https://raw.githubusercontent.com/snehankekre/bottomtime/main/docs/images/dive-list.png)
 
 The app lists every dive with its runtime, max depth, deco time, GF99, and
 CNS, sorts and filters them, and charts any of those across your dives. Open a
@@ -72,10 +83,14 @@ deco ceiling, GF99, and ppO2, with a readout of each computer at the same
 moment. **Export all** saves every dive as CSV in a zip file, so your data
 stays readable without bottomtime or the manufacturers' apps.
 
-Help, in the app, explains every column and term. Settings switches between
-metric and imperial, can look for new dives each time the app opens, and
-shows where your data lives. After an update the app rebuilds your dive list
-from the files it saved, by itself.
+The first time you open the dive list, and the first time you open a dive, a
+short tour points out what each part does. Help explains every column and
+term and can show the tour again, and every button says what it does when you
+hold the pointer over it. Settings switches between metric and imperial, can
+look for new dives each time the app opens, and shows where your data lives.
+After an update the app rebuilds your dive list from the files it saved, by
+itself. [The manual](https://snehankekre.com/bottomtime/manual.html) covers
+all of it, including what to do when something goes wrong.
 
 Everything stays on your Mac, in `~/Library/Application Support/bottomtime`.
 The Garmin download uses Garmin Connect's unofficial API, through
@@ -163,7 +178,7 @@ sqlite3 data/dives.db "SELECT dive_number, max_depth_m FROM v_dive_summary
 datasette data/dives.db   # instant web UI + JSON API, if you have datasette
 ```
 
-All commands are idempotent: re-running an ingest skips already-stored dives,
+All commands are idempotent. Re-running an ingest skips already-stored dives,
 so syncing after a dive trip only adds what's new.
 
 ## Schema in one breath

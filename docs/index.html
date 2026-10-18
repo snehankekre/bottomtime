@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bottomtime · every dive computer you wore, on one timeline</title>
+<meta name="description" content="A free Mac app for divers who wear a Shearwater and a Garmin Descent. It lines up both computers' logs of each dive and keeps every value they recorded, including GF99 and the deco ceiling.">
+<meta property="og:title" content="bottomtime">
+<meta property="og:description" content="Every dive computer you wore, on one timeline. A free Mac app for Shearwater and Garmin Descent divers.">
+<meta property="og:image" content="https://snehankekre.com/bottomtime/images/dive.png">
+<link rel="icon" href="images/icon.png">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="./">bottomtime</a>
+  <nav>
+    <a href="manual.html">Manual</a>
+    <a href="cli.html">Command line</a>
+    <a href="data.html">Your data</a>
+    <a href="how-it-works.html">How it works</a>
+    <a href="https://github.com/snehankekre/bottomtime">GitHub</a>
+  </nav>
+</header>
+
+<section class="hero">
+  <h1>Every dive computer you wore, on one timeline</h1>
+  <p class="lede">bottomtime is a free Mac app for divers who wear a Shearwater and a Garmin Descent. It reads the dives both computers recorded, lines up the two logs of each dive, and keeps every value they logged, including the GF99 and deco ceiling that Shearwater's exports leave out.</p>
+  <div class="buttons">
+    <a class="button primary" href="https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac.zip">Download for Mac</a>
+    <a class="button" href="manual.html">Read the manual</a>
+  </div>
+  <p class="small">Free and open source. For Macs with Apple silicon, on macOS 11 or newer. <a href="manual.html#installing-bottomtime">How to install it</a>.</p>
+</section>
+
+<figure class="shot">
+  <img src="images/dive.png" width="1280" height="1038" alt="A dive logged by a Garmin Descent Mk3 and a Shearwater Perdix 2: both depth profiles on one timeline with the Perdix's deco ceiling dashed, GF99 and ppO2 below, and a readout of both computers at 18:43 into the dive">
+  <figcaption>A 58 m dive in Tulamben, logged by a Garmin Descent Mk3 and a Shearwater Perdix 2. The readout shows both computers at 18:43 into the dive.</figcaption>
+</figure>
+
+<section class="features">
+  <div>
+    <h2>Both computers, one timeline</h2>
+    <p>No two dive computers' clocks agree. bottomtime takes the time zone from the Garmin, then slides one depth profile along the other until they match, so you can read what each computer said at the same moment. Neither log is changed or resampled. It lines up any pair of computers, two Shearwaters included.</p>
+  </div>
+  <div>
+    <h2>Every value, kept</h2>
+    <p>Shearwater's XML and CSV exports leave out GF99, the deco ceiling, and @+5. bottomtime reads Shearwater's own log format, so those are all there, along with ppO2 sensors, battery voltage, and everything the Garmin recorded. Export all saves every dive as CSV files that open in Excel or Numbers without bottomtime.</p>
+  </div>
+  <div>
+    <h2>Look across your dives</h2>
+    <p>Sort every dive by depth, deco time, GF99 at surfacing, or CNS, and chart any of them by date. Search by site, or narrow the list to the dates of one trip. Click any dive to open it.</p>
+  </div>
+</section>
+
+<section class="band">
+  <img src="images/dive-list.png" width="1280" height="920" alt="The dive list, with a chart of max depth for every dive by date above a sortable table of dives">
+  <div>
+    <h2>Getting your dives in</h2>
+    <p>If Shearwater Cloud's desktop app is on your Mac, bottomtime reads its dives directly, with nothing to export. For your Garmin, sign in to Garmin Connect once, and bottomtime downloads the original file of every dive your watch has synced.</p>
+    <p>After a dive trip, sync your computers as usual and open bottomtime. It picks up the new dives by itself. You can also add Garmin <code>.fit</code> files and Shearwater Cloud database exports by hand.</p>
+    <p>The first time you open it, a short tour shows you around. <a href="manual.html">The manual</a> covers the rest.</p>
+  </div>
+</section>
+
+<section class="band">
+  <div>
+    <h2>Your dives stay on your Mac</h2>
+    <p>bottomtime keeps an untouched copy of every file it reads, Garmin's original files and each copy of Shearwater Cloud's database, and builds your dive list from those copies. If anything goes wrong, the list can be rebuilt from them.</p>
+    <p>It sends nothing about your dives anywhere. It contacts Garmin Connect only to download your dives, and GitHub only to check for a new version.</p>
+  </div>
+  <div>
+    <h2>Checked against the manufacturers' own numbers</h2>
+    <p>Decoded Shearwater values match Shearwater's XML export on all 142 dives I exported, and GF99 is within one point of Shearwater Cloud's end-of-dive GF99 on all 144. bottomtime has been tested with a Perdix 2, a Petrel 3 on a Choptima CCR, and a Descent Mk3. <a href="how-it-works.html">How it works</a> explains the matching and the checks.</p>
+  </div>
+</section>
+
+<section class="band">
+  <div>
+    <h2>For programmers</h2>
+    <p>bottomtime is also a Python package and a command-line tool. Every dive lands in one SQLite file with a documented schema, ready for SQL or pandas. The Shearwater decoder is published on its own as <a href="https://github.com/snehankekre/pnf">pnf</a>, with a byte-by-byte specification of the format.</p>
+  </div>
+  <div>
+<pre>pip install bottomtime
+bottomtime ingest shearwater dive_data.db
+bottomtime ingest garmin ~/dives/fit
+bottomtime match
+bottomtime show 291</pre>
+    <p><a href="cli.html">Command line and Python</a> · <a href="data.html">What's stored</a></p>
+  </div>
+</section>
+
+<footer class="foot" style="max-width:1080px;margin-top:48px">
+  bottomtime is free and open source under the MIT license, made by
+  <a href="https://snehankekre.com">Snehan Kekre</a>.
+  <a href="https://github.com/snehankekre/bottomtime/issues">Report a problem</a>.
+</footer>
+</body>
+</html>

@@ -29,7 +29,9 @@ dev = ["pytest"]
 bottomtime = "bottomtime.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/snehankekre/bottomtime"
+Homepage = "https://snehankekre.com/bottomtime/"
+Documentation = "https://snehankekre.com/bottomtime/manual.html"
+Source = "https://github.com/snehankekre/bottomtime"
 Issues = "https://github.com/snehankekre/bottomtime/issues"
 
 [tool.hatch.build.targets.wheel]

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ page.title }} · bottomtime</title>
+<meta name="description" content="{{ page.description | default: site.description }}">
+<link rel="icon" href="images/icon.png">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="./">bottomtime</a>
+  <nav>
+    <a href="manual.html">Manual</a>
+    <a href="cli.html">Command line</a>
+    <a href="data.html">Your data</a>
+    <a href="how-it-works.html">How it works</a>
+    <a href="https://github.com/snehankekre/bottomtime">GitHub</a>
+  </nav>
+</header>
+<main class="doc">
+{{ content }}
+</main>
+<footer class="foot">
+  bottomtime is free and open source under the MIT license, made by
+  <a href="https://snehankekre.com">Snehan Kekre</a>.
+  <a href="https://github.com/snehankekre/bottomtime/issues">Report a problem</a>.
+</footer>
+</body>
+</html>

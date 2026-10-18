@@ -1,0 +1,13 @@
+title: bottomtime
+description: Every dive computer you wore, on one timeline. A free Mac app and Python package for Shearwater and Garmin Descent divers.
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+plugins:
+  - jekyll-relative-links
+relative_links:
+  enabled: true
+defaults:
+  - scope: {path: ""}
+    values: {layout: doc}
