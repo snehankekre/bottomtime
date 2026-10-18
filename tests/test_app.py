@@ -3,6 +3,8 @@
 import sqlite3
 import time
 
+import pytest
+
 from bottomtime import app
 from bottomtime.store import db as store_db
 
@@ -51,7 +53,7 @@ def test_delete_everything_leaves_an_empty_store(tmp_path):
 
 
 def test_a_rejected_garmin_sign_in_signs_out(tmp_path, monkeypatch):
-    import garminconnect
+    garminconnect = pytest.importorskip("garminconnect")
 
     class Rejected(garminconnect.Garmin):
         def login(self, *args, **kwargs):
