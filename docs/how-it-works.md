@@ -83,6 +83,32 @@ Dives shorter than 2 minutes or shallower than 2 m are marked as pool or test
 dives, left unnumbered, and never matched. Real dives are numbered in date
 order.
 
+## Comparing the computers
+
+A dive computer measures pressure and turns it into depth using the water
+density it's set to, so a computer set to lighter water reads deeper. Depth is
+proportional to one over the density: a computer set to fresh water (1000
+kg/m³) reads 1020/1000 − 1 = 2.0% deeper than one set to EN13319 (1020).
+Shearwater's salt setting is 1030 kg/m³ and Garmin's is 1025, so the same word
+on the two brands reads 0.5% apart.
+
+For each dive two computers logged, bottomtime pairs their depth readings on
+the shared timeline, keeping pairs taken within 1.5 seconds of each other with
+both deeper than 5 m. Shallower than that, a fixed offset between two wrists
+dominates the percentage. It needs at least 20 pairs. The median ratio is the
+depth gap, and the ratio of the two density settings is the part the settings
+explain. Both are on the dive's page, along with each computer's gradient
+factors, minutes of required stops, and CNS at the end.
+
+On my dives, 61 matched pairs have enough readings below 5 m. In every one,
+the two computers were set to different water densities. On 23 of them the
+Descent was on fresh water and the Perdix on EN13319, and those differ by a
+median of 1.7%. The settings explain the whole gap, to within 0.25 points, on
+23 of the 61. The median gap the settings don't explain is 0.29 points, or
+0.12 m. Two dives in December 2025 differ by 6%, with the Perdix a steady 0.6
+to 0.8 m shallower than the Descent at 9 to 15 m, which looks like where each
+computer was worn.
+
 ## Checking itself
 
 `bottomtime verify` runs four checks, and the numbers on this site come from

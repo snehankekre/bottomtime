@@ -59,11 +59,11 @@ pandas, or whatever you analyze with.
 ## The Mac app
 
 If you'd rather not use a terminal, bottomtime is also a Mac app. It runs on
-Apple silicon Macs (M1 and later) with macOS 11 or newer, and has everything
-it needs inside it.
+macOS 11 or newer and has everything it needs inside it.
 
-1. Download [`bottomtime-mac.zip`](https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac.zip),
-   unzip it, and drag `bottomtime` into Applications.
+1. Download [`bottomtime-mac.zip`](https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac.zip)
+   for an Apple silicon Mac, or [`bottomtime-mac-intel.zip`](https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac-intel.zip)
+   for an Intel Mac. Unzip it and drag `bottomtime` into Applications.
 2. Open it. macOS will say it can't verify the app, because the app isn't
    notarized by Apple. Open System Settings, go to Privacy & Security, scroll
    down to the message about bottomtime, and click Open Anyway. You only do
@@ -80,8 +80,11 @@ The app lists every dive with its runtime, max depth, deco time, GF99, and
 CNS, sorts and filters them, and charts any of those across your dives. Open a
 dive and every computer you wore is on one timeline: depth, the Shearwater's
 deco ceiling, GF99, and ppO2, with a readout of each computer at the same
-moment. **Export all** saves every dive as CSV in a zip file, so your data
-stays readable without bottomtime or the manufacturers' apps.
+moment. When two computers logged a dive, the app says how far apart their
+depths were and how much of that their water density settings explain, and
+puts their settings, deco, and CNS side by side. **Export all** saves every
+dive as CSV in a zip file, so your data stays readable without bottomtime or
+the manufacturers' apps.
 
 The first time you open the dive list, and the first time you open a dive, a
 short tour points out what each part does. Help explains every column and

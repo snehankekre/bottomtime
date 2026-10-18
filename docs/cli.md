@@ -127,6 +127,13 @@ Each log in `sources` has:
 | `header` | The decoded header, verbatim. |
 | `start_time_utc`, `start_time_local`, `duration_s`, `max_depth_m`, `sample_interval_ms`, `mode`, `device`, `name` | The log's own numbers. |
 
+`compare_logs(load_dive(db, n))` returns what the dive's computers said side
+by side: each log's water density, gradient factors, max depth, minutes of
+required stops, CNS at the end, and runtime, and for each log after the first,
+how much deeper it read than the first (`pct` and `m`, medians below 5 m) and
+how much of that the water settings predict (`settings_pct`). It returns None
+for a dive with one log.
+
 ## SQL
 
 The store is one SQLite file, so any SQLite tool reads it:

@@ -33,12 +33,16 @@ it as spreadsheet files that you can open without bottomtime.
 
 ## Installing bottomtime
 
-bottomtime runs on Macs with Apple silicon (M1 or later) and macOS 11 Big Sur
-or newer. To check, open the Apple menu and choose About This Mac. The line
-that says Chip should start with "Apple M".
+bottomtime runs on macOS 11 Big Sur or newer. There are two downloads, one
+for each kind of Mac. To see which you have, open the Apple menu and choose
+About This Mac. If the line that says Chip starts with "Apple M", you have an
+Apple silicon Mac. If there's a line that says Processor and it names Intel,
+you have an Intel Mac.
 
-1. Download `bottomtime-mac.zip` from the
-   [latest release](https://github.com/snehankekre/bottomtime/releases/latest).
+1. Download [`bottomtime-mac.zip`](https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac.zip)
+   for an Apple silicon Mac, or
+   [`bottomtime-mac-intel.zip`](https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac-intel.zip)
+   for an Intel Mac.
 2. Double-click the zip file to unzip it, and drag `bottomtime` into your
    Applications folder.
 3. Open bottomtime from Applications. macOS will say that it can't verify
@@ -146,6 +150,7 @@ to sort by it, and click it again to reverse the order.
 | Max GF99 | The highest GF99 the Shearwater showed during the dive. |
 | GF99 surfacing | The highest GF99 in the last ten minutes of the dive. This matches the end-of-dive GF99 that Shearwater Cloud calculates. |
 | CNS | The highest oxygen exposure any computer showed. |
+| Depth gap | On dives two computers logged, how far apart their depths were below 5 m, as a percentage. The dive's page says which read deeper and why. |
 | Mode | The mode the computer was in, such as OC tec or CC. |
 | Computers | Every computer that logged the dive. |
 
@@ -161,7 +166,8 @@ dives. They're hidden unless you tick **Include pool and test dives**.
 
 The chart puts a dot for every dive in the list, by date. Choose what it shows
 with the Chart menu: max depth, GF99 at surfacing, max GF99, runtime, time in
-deco, or CNS. Hold the pointer over a dot to see which dive it is, and click
+deco, CNS, the depth gap between computers, or the difference in their deco
+time. Hold the pointer over a dot to see which dive it is, and click
 it to open that dive. The chart follows the search and the dates, so you can
 compare the dives of a single trip.
 
@@ -175,6 +181,36 @@ At the top is one card for each computer that logged the dive. It shows the
 computer's serial number, the time the dive started by that computer's own
 clock, the runtime and max depth that computer recorded, its mode, and the
 gases it had set up, written as oxygen/helium (21/0 is air, 50/0 is EAN50).
+
+### How the computers compared
+
+When two computers logged the dive, a box under the cards compares them.
+
+![The comparison for dive 317: the Perdix 2 read 0.4% deeper than the Descent Mk3, their water settings would have made it read 0.5% shallower, and a table of each computer's settings, required stops, and CNS](images/compare.png)
+
+The first sentence says how far apart the two computers' depths were, using
+every pair of readings taken deeper than 5 m within a second and a half of
+each other. It gives the median difference as a percentage and in metres.
+
+The next sentence says how much of that the computers' water density settings
+explain. A dive computer measures pressure and works out depth from it, so it
+needs to know how heavy the water is. A computer set to lighter water reads
+deeper. Fresh water (1000 kg/m³) reads 2% deeper than EN13319 (1020).
+Shearwater and Garmin also mean
+different things by "salt": 1030 kg/m³ on a Shearwater and 1025 on a Garmin.
+Whatever the settings don't explain comes from the computers themselves, or
+from where each was worn, since two computers on different arms can sit at
+different depths. On a shallow dive, a fixed difference like that is a large
+percentage, which is why the sentence gives metres too.
+
+When the computers showed different amounts of required stops, a sentence
+says so, and points out when they were set to different gradient factors.
+
+The table puts the two computers side by side: water setting, gradient
+factors, max depth, minutes of required stops, CNS at the end of the dive, and
+runtime. Values that differ are in bold.
+
+### The charts
 
 Below the cards are up to three charts on the same timeline:
 
@@ -345,6 +381,7 @@ Trash. Your dives in Shearwater Cloud and Garmin Connect stay where they are.
 |---|---|
 | GF99 | How close your leading tissue compartment is to its Bühlmann limit at your current depth, as a percentage. 100 means you are at the limit. |
 | Ceiling | The shallowest depth the computer would let you ascend to right now. |
+| Water density | The setting a dive computer uses to turn pressure into depth: 1000 kg/m³ for fresh water, 1020 for EN13319, and 1025 or 1030 for salt water depending on the maker. |
 | @+5 | What your time to surface would be if you stayed five more minutes at this depth. |
 | TTS | Time to surface, including every stop. |
 | NDL | No-decompression limit: the minutes left before you'd need a stop. |
