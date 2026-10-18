@@ -19,8 +19,9 @@ from .store.schema import SOURCES
 
 def computer_info(source: str, header: dict) -> dict:
     """Model / firmware / serial of the computer that produced a source log,
-    extracted from its verbatim header."""
+    and the settings it dived with, extracted from its verbatim header."""
     if source == "garmin":
+        settings = (header.get("dive_settings_mesgs") or [{}])[0]
         file_id = (header.get("file_id_mesgs") or [{}])[0]
         product = file_id.get("garmin_product") or file_id.get("product_name")
         model = str(product).replace("_", " ").title() if product else None
@@ -35,7 +36,15 @@ def computer_info(source: str, header: dict) -> dict:
             None,
         )
         serial = file_id.get("serial_number")
-        return {"model": model, "firmware": firmware, "serial": serial}
+        return {
+            "model": model,
+            "firmware": firmware,
+            "serial": serial,
+            "water_density": settings.get("water_density"),
+            "gf_low": settings.get("gf_low"),
+            "gf_high": settings.get("gf_high"),
+            "deco_model": settings.get("model"),
+        }
 
     pnf_header = header.get("pnf") or {}
     firmware = pnf_header.get("computer_firmware")
@@ -44,7 +53,80 @@ def computer_info(source: str, header: dict) -> dict:
         "model": pnf_header.get("computer_model"),
         "firmware": f"v{firmware}" if firmware is not None else None,
         "serial": f"{serial:08X}" if serial is not None else None,
+        "water_density": pnf_header.get("water_density"),
+        "gf_low": pnf_header.get("gf_low"),
+        "gf_high": pnf_header.get("gf_high"),
+        "deco_model": pnf_header.get("deco_model"),
     }
+
+
+# Depth gaps are compared below this depth, where a fixed offset between two
+# wrists stops dominating the percentage.
+GAP_MIN_DEPTH_M = 5.0
+GAP_MIN_READINGS = 20
+
+
+def depth_gap(a: tuple[list, list], b: tuple[list, list]) -> dict | None:
+    """How much deeper b read than a, as the median percentage over readings
+    taken within a second and a half of each other. a and b are (times,
+    depths) on the dive's shared timeline, with times ascending."""
+    import bisect
+    from statistics import median
+
+    a_t, a_d = a
+    ratios, diffs = [], []
+    for t, d in zip(*b):
+        i = bisect.bisect_left(a_t, t - 1.5)
+        if i < len(a_t) and abs(a_t[i] - t) <= 1.5 and d and a_d[i]:
+            if d > GAP_MIN_DEPTH_M and a_d[i] > GAP_MIN_DEPTH_M:
+                ratios.append(d / a_d[i])
+                diffs.append(d - a_d[i])
+    if len(ratios) < GAP_MIN_READINGS:
+        return None
+    return {
+        "pct": round((median(ratios) - 1) * 100, 2),
+        "m": round(median(diffs), 2),
+        "readings": len(ratios),
+    }
+
+
+def compare_logs(dive: dict) -> dict | None:
+    """What each computer said about the same dive, side by side, and how far
+    apart their depths were. None for a dive with one log."""
+    logs = list(source_logs(dive))
+    if len(logs) < 2:
+        return None
+    rows, series = [], []
+    for source, log in logs:
+        s, info = log["samples"], log["computer"]
+        step_min = (log["sample_interval_ms"] or 1000) / 60000
+        if source == "shearwater":
+            deco = sum(v or 0 for v in s.get("in_deco", [])) * step_min
+        else:
+            deco = sum(1 for v in s.get("next_stop_depth_m", []) if v and v > 0) * step_min
+        cns = [v for v in s.get("cns_pct", []) if v is not None]
+        rows.append({
+            "computer": info["model"] or source,
+            "water_density": info["water_density"],
+            "gf_low": info["gf_low"],
+            "gf_high": info["gf_high"],
+            "deco_model": info["deco_model"],
+            "max_depth_m": log["max_depth_m"],
+            "duration_s": log["duration_s"],
+            "deco_min": round(deco, 1),
+            "cns_end": cns[-1] if cns else None,
+        })
+        series.append(([log["offset_s"] + t for t in s["t_s"]], s["depth_m"]))
+    # Every other log against the first, the one that started earliest.
+    depth = []
+    for i in range(1, len(logs)):
+        gap = depth_gap(series[0], series[i])
+        ref, other = rows[0]["water_density"], rows[i]["water_density"]
+        if gap and ref and other:
+            # Depth is pressure over density, so a lighter setting reads deeper.
+            gap["settings_pct"] = round((ref / other - 1) * 100, 2)
+        depth.append(gap)
+    return {"logs": rows, "depth": depth}
 
 
 def _columns_of(con: sqlite3.Connection, table: str) -> list[str]:
@@ -194,11 +276,29 @@ def dive_summaries(db_path: str | Path) -> list[dict]:
 
         members: dict[int, list] = defaultdict(list)
         for r in con.execute(
-            "SELECT dm.dive_id, sd.id, sd.source, sd.model, sd.mode, sd.name"
+            "SELECT dm.dive_id, dm.offset_s, sd.id, sd.source, sd.model, sd.mode, sd.name"
             " FROM dive_members dm JOIN source_dives sd ON sd.id = dm.source_dive_id"
             " ORDER BY dm.offset_s"
         ):
             members[r["dive_id"]].append(r)
+
+        def depth_gap_pct(logs):
+            """The largest gap between the first log and any other, unsigned."""
+            series = []
+            for m in logs:
+                table = SOURCES[m["source"]]["samples"]
+                rows = con.execute(
+                    f"SELECT t_s, depth_m FROM {table} WHERE source_dive_id=? ORDER BY t_s", (m["id"],)
+                ).fetchall()
+                series.append(([m["offset_s"] + r[0] for r in rows], [r[1] for r in rows]))
+            gaps = [depth_gap(series[0], other) for other in series[1:]]
+            gaps = [abs(g["pct"]) for g in gaps if g]
+            return max(gaps) if gaps else None
+
+        def spread(logs, key):
+            values = [per_log.get(m["id"], {}).get(key) for m in logs]
+            values = [v or 0 for v in values]
+            return max(values) - min(values) if len(values) > 1 else None
 
         def best(logs, key):
             values = [per_log.get(m["id"], {}).get(key) for m in logs]
@@ -227,6 +327,8 @@ def dive_summaries(db_path: str | Path) -> list[dict]:
                     "gf99_surf": best(logs, "gf99_surf"),
                     "cns_pct": best(logs, "cns"),
                     "deco_min": best(logs, "deco_min"),
+                    "depth_gap_pct": depth_gap_pct(logs) if len(logs) > 1 else None,
+                    "deco_gap_min": spread(logs, "deco_min"),
                 }
             )
         return out

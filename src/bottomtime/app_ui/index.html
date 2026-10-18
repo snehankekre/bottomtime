@@ -127,6 +127,13 @@
   .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin: 0 0 6px; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .panels { position: relative; }
+  .compare { margin-bottom: 14px; }
+  .compare h2 { font-size: 14px; margin: 0 0 6px; }
+  .compare p { margin: 0 0 6px; color: var(--text-secondary); max-width: 900px; }
+  .compare table { margin-top: 10px; border-radius: 6px; }
+  .compare th { cursor: default; }
+  .compare td:first-child { color: var(--text-muted); }
+  .compare tr.differs td:not(:first-child) { font-weight: 600; }
   .note { font-size: 12px; color: var(--text-muted); margin: 8px 0 0; }
 
   .tip { position: fixed; pointer-events: none; z-index: 20; background: var(--surface-1); border: 1px solid var(--hairline);
@@ -244,6 +251,11 @@
       <button id="d-export" title="Every sample from every computer on this dive, in one CSV file">Export this dive (CSV)</button>
     </div>
     <div class="logs" id="d-logs"></div>
+    <div class="card compare" id="d-compare" hidden>
+      <h2>How the computers compared</h2>
+      <div id="d-findings"></div>
+      <div class="table-wrap"><table id="d-compare-table"></table></div>
+    </div>
     <div class="card">
       <div class="legend" id="d-legend"></div>
       <div class="panels" id="panels" tabindex="0" aria-label="Dive charts. Use the left and right arrow keys to move through the dive."></div>
@@ -342,6 +354,7 @@
       <dt>Max GF99</dt><dd>The highest GF99 the Shearwater showed during the dive.</dd>
       <dt>GF99 surfacing</dt><dd>The highest GF99 in the last ten minutes of the dive. It matches the end-of-dive GF99 that Shearwater Cloud calculates.</dd>
       <dt>CNS</dt><dd>The highest oxygen toxicity percentage any computer showed.</dd>
+      <dt>Depth gap</dt><dd>On dives two computers logged, how far apart their depths were below 5 m, as a percentage. The dive's page says which read deeper and how much of it their water settings explain.</dd>
       <dt>Computers</dt><dd>Every computer that logged the dive.</dd>
     </dl>
     <p>Click a column to sort by it. The chart above the list plots any of these columns for each dive by date; pick the column with Chart, and click a dot to open that dive.</p>
@@ -349,6 +362,7 @@
     <h3>Reading a dive</h3>
     <p>Each computer gets its own colour. The solid line is depth, and the dashed line in the same colour is the deco ceiling the Shearwater calculated. Below are GF99 and ppO2 on the same time axis. Move the pointer over the charts, or use the arrow keys, to read every computer at the same moment.</p>
     <p>No two dive computers' clocks agree. bottomtime takes the time zone from the Garmin, then slides one depth profile against the other until they match best. The seconds left over are shown under the chart. Neither log is changed, merged, or resampled.</p>
+    <p>When two computers logged the dive, How the computers compared says how far apart their depths were below 5 m, and how much of that their water density settings explain. A computer set to lighter water reads deeper: fresh water (1000 kg/m³) reads 2% deeper than EN13319 (1020). Shearwater's "salt" is 1030 kg/m³ and Garmin's is 1025. Below that, a table puts each computer's settings, required stops, and CNS side by side, with the values that differ in bold.</p>
 
     <h3>Terms</h3>
     <dl>
@@ -493,6 +507,8 @@ const COLUMNS = [
    help: "The highest GF99 in the last ten minutes. It matches the end-of-dive GF99 Shearwater Cloud calculates."},
   {key: "cns_pct", label: "CNS", num: true, get: (d) => d.cns_pct, show: (d) => d.cns_pct == null ? "" : num(d.cns_pct) + "%",
    help: "The highest oxygen exposure any computer showed, as a percentage of the limit."},
+  {key: "depth_gap_pct", label: "Depth gap", num: true, get: (d) => d.depth_gap_pct, show: (d) => d.depth_gap_pct == null ? "" : num(d.depth_gap_pct, 1) + "%",
+   help: "On dives two computers logged: how far apart their depths were below 5 m. Open the dive to see which read deeper, and how much their water settings explain."},
   {key: "mode", label: "Mode", get: (d) => d.mode, show: (d) => fmtMode(d.mode)},
   {key: "computers", label: "Computers", get: (d) => d.computers.join(" + "), show: (d) => d.computers.join(" + "), cls: "wrap"},
 ];
@@ -503,6 +519,8 @@ const METRICS = {
   runtime_min: {label: () => "Runtime (min)", get: (d) => d.duration_s == null ? null : d.duration_s / 60},
   deco_min: {label: () => "Time in deco (min)", get: (d) => d.deco_min},
   cns_pct: {label: () => "CNS (%)", get: (d) => d.cns_pct},
+  depth_gap_pct: {label: () => "Depth gap between computers (%)", get: (d) => d.depth_gap_pct, dp: () => 1},
+  deco_gap_min: {label: () => "Deco time gap between computers (min)", get: (d) => d.deco_gap_min},
 };
 
 function filtered() {
@@ -700,7 +718,72 @@ function renderDive() {
   $("d-note").textContent = m.length
     ? "Lined up from the logs' own clocks, then by matching the depth profiles: " + m.map((x) => `${x.residual_skew_s >= 0 ? "+" : ""}${x.residual_skew_s} s left over, profile match ${num(x.xcorr_score, 3)}`).join("; ") + ". Neither log is changed or resampled."
     : d.logs.length > 1 ? "" : "Recorded by one computer.";
+  renderCompare();
   renderPanels();
+}
+
+// Shearwater's "salt" is 1030 kg/m³ and Garmin's is 1025, so the number is shown too.
+const WATER = {1000: "fresh", 1020: "EN13319", 1025: "salt", 1030: "salt"};
+const gfText = (l) => ["gf", "zhl_16c"].includes(l.deco_model) || !l.deco_model
+  ? (l.gf_low == null ? "" : `${l.gf_low}/${l.gf_high}`) : l.deco_model.toUpperCase().replace("_", "-");
+function renderCompare() {
+  const c = current.compare, box = $("d-compare");
+  box.hidden = !c;
+  if (!c) return;
+  const L = c.logs, findings = $("d-findings");
+  findings.textContent = "";
+  const say = (text) => { const p = document.createElement("p"); p.textContent = text; findings.append(p); };
+  const pct = (v) => Math.abs(v).toFixed(1) + "%";
+  const dir = (v) => (v > 0 ? "deeper" : "shallower");
+  c.depth.forEach((g, k) => {
+    const a = L[0], b = L[k + 1];
+    if (!g) return;
+    const below = `Below ${fmtDepth(5, 0)}`;
+    let t = Math.abs(g.pct) < 0.25
+      ? `${below}, the ${b.computer} and the ${a.computer} read the same depth, to within 0.25%.`
+      : `${below}, the ${b.computer} read ${pct(g.pct)} ${dir(g.pct)} than the ${a.computer}, a median of ${fmtDepth(Math.abs(g.m))}.`;
+    if (g.settings_pct != null && a.water_density === b.water_density) {
+      if (Math.abs(g.pct) >= 0.25) t += ` Both were set to ${a.water_density} kg/m³ water, so their settings don't explain it.`;
+    } else if (g.settings_pct != null) {
+      t += ` Their water settings alone, ${b.water_density} and ${a.water_density} kg/m³, would make the ${b.computer} read ${pct(g.settings_pct)} ${dir(g.settings_pct)}.`;
+      const rest = g.pct - g.settings_pct;
+      t += Math.abs(rest) < 0.25 ? " That accounts for the difference." : ` That leaves ${pct(rest)} the settings don't explain.`;
+    }
+    say(t);
+  });
+  for (const b of L.slice(1)) {
+    const a = L[0], x = Math.round(a.deco_min), y = Math.round(b.deco_min);
+    if (!x && !y) continue;
+    if (x === y) { say(`Both showed ${x} minutes of required stops.`); continue; }
+    let t = `The ${a.computer} showed ${x} minutes of required stops and the ${b.computer} ${y}.`;
+    if (gfText(a) && gfText(b) && gfText(a) !== gfText(b)) t += ` They were set to different gradient factors, ${gfText(a)} and ${gfText(b)}.`;
+    say(t);
+  }
+  const ROWS = [
+    ["Water setting", (l) => l.water_density ? `${l.water_density} kg/m³` + (WATER[l.water_density] ? ` (${WATER[l.water_density]})` : "") : ""],
+    ["Gradient factors", gfText],
+    ["Max depth", (l) => fmtDepth(l.max_depth_m)],
+    ["Required stops", (l) => `${Math.round(l.deco_min)} min`],
+    ["CNS at the end", (l) => (l.cns_end == null ? "" : num(l.cns_end) + "%")],
+    ["Runtime", (l) => fmtDur(l.duration_s)],
+  ];
+  const table = $("d-compare-table");
+  table.textContent = "";
+  const head = document.createElement("tr");
+  head.append(document.createElement("th"));
+  L.forEach((l, i) => {
+    const th = document.createElement("th"), k = document.createElement("span");
+    k.className = "key"; k.style.borderTopColor = color(i); k.style.marginRight = "6px";
+    th.append(k, l.computer); head.append(th);
+  });
+  table.append(head);
+  for (const [label, show] of ROWS) {
+    const values = L.map(show);
+    const tr = document.createElement("tr");
+    if (new Set(values).size > 1) tr.className = "differs";
+    for (const v of [label, ...values]) { const td = document.createElement("td"); td.textContent = v; tr.append(td); }
+    table.append(tr);
+  }
 }
 
 const PANELS = [
@@ -836,6 +919,7 @@ const TOURS = {
   ],
   dive: [
     ["#d-logs", "The computers", "One card for each computer that logged this dive: its serial number, when it started by its own clock, and the gases it had."],
+    ["#d-compare", "How the computers compared", "How far apart the computers' depths were, and how much of that their water settings explain. Below that, their settings and deco side by side, with the values that differ in bold.", () => current.compare],
     ["#panels", "Read the dive", "Move the pointer over the charts to read every computer at the same moment. You can also click the charts and use the left and right arrow keys. Solid lines are depth, and the dashed line is the deco ceiling the Shearwater calculated."],
     ["#d-note", "Lining up the clocks", "No two computers' clocks agree, so bottomtime slides one depth profile against the other until they match. This line says how many seconds were left over.", () => current.matches.length],
     ["#d-export", "Export this dive", "Saves every sample from every computer on this dive in one CSV file."],

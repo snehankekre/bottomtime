@@ -92,9 +92,9 @@ def store(tmp_path):
 
 def test_computer_info():
     g = computer_info("garmin", GARMIN_HEADER)
-    assert g == {"model": "Descent Mk3", "firmware": 25.21, "serial": 12345}
+    assert g["model"] == "Descent Mk3" and g["firmware"] == 25.21 and g["serial"] == 12345
     s = computer_info("shearwater", SHEARWATER_HEADER)
-    assert s == {"model": "Perdix 2", "firmware": "v100", "serial": "A823C228"}
+    assert s["model"] == "Perdix 2" and s["firmware"] == "v100" and s["serial"] == "A823C228"
 
 
 def test_list(store, capsys):

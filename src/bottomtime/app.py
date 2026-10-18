@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from . import __version__
-from .api import dive_summaries, load_dive, source_logs, write_dive_csv
+from .api import compare_logs, dive_summaries, load_dive, source_logs, write_dive_csv
 from .store import db as store_db
 
 UI = Path(__file__).parent / "app_ui" / "index.html"
@@ -550,6 +550,7 @@ def dive_chart(db: Path, dive_id: int) -> dict:
         "max_depth_m": dive["max_depth_m"],
         "logs": logs,
         "matches": dive["matches"],
+        "compare": compare_logs(dive),
     }
 
 
