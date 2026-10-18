@@ -15,7 +15,7 @@ Design principles:
   entry in SOURCES.
 """
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Every source kind: its samples table, and what its start time means. 'utc'
 # logs carry true UTC (Garmin). 'local' logs carry a wall clock with no zone
@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS source_dives (
   source_key TEXT NOT NULL,        -- garmin activityId | shearwater '<serial>#<diveNumber>'
   device TEXT NOT NULL,            -- '<source>:<serial>', one per physical computer
   model TEXT,                      -- e.g. 'Perdix 2', 'Descent Mk3'
+  name TEXT,                       -- the diver's or Garmin's name for it, if not generic
   content_hash TEXT NOT NULL,
   decoder_version TEXT NOT NULL,   -- package that decoded it, e.g. 'pnf 0.2.0' 
   start_time_utc TEXT,             -- 'local' clocks: NULL until a match gives the offset

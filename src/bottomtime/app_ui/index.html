@@ -34,12 +34,15 @@
       --hairline: #383835;
       --grid: #2a2a28;
       --accent: #3987e5;
+      --critical: #e66767;
       --series-1: #3987e5;
       --series-2: #d95926;
       --series-3: #199e70;
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  h2[tabindex="-1"]:focus { outline: none; }
   body { margin: 0; background: var(--surface-0); color: var(--text-primary); font: 14px/1.45 var(--sans); }
   button, select, input { font: inherit; color: inherit; }
   button {
@@ -49,7 +52,9 @@
   button:hover:not(:disabled) { border-color: var(--text-muted); }
   button:disabled { opacity: .5; cursor: default; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; }
+  button.quiet { border-color: transparent; background: none; color: var(--text-secondary); }
+  button.danger { color: var(--critical); }
+  .link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   header.bar {
@@ -59,10 +64,15 @@
   }
   .brand { font-weight: 600; font-size: 16px; }
   .brand .count { font-weight: 400; color: var(--text-secondary); font-size: 13px; margin-left: 8px; }
-  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
-  .status { padding: 8px 20px; font-size: 13px; background: var(--surface-2); border-bottom: 1px solid var(--hairline); }
-  .status.error { color: var(--critical); }
-  .status .spin { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border: 2px solid var(--text-muted);
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .actions .sep { width: 1px; height: 22px; background: var(--hairline); margin: 0 4px; }
+  .banner { padding: 8px 20px; font-size: 13px; background: var(--surface-2); border-bottom: 1px solid var(--hairline);
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .banner .grow { flex: 1; }
+  .banner.error { color: var(--critical); }
+  .banner pre { flex-basis: 100%; margin: 4px 0 0; padding: 8px; max-height: 180px; overflow: auto; font-size: 11px;
+    background: var(--surface-1); border: 1px solid var(--hairline); border-radius: 6px; color: var(--text-secondary); white-space: pre-wrap; }
+  .spin { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--text-muted);
     border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; }
   @keyframes spin { to { transform: rotate(360deg); } }
   main { padding: 20px; max-width: 1400px; margin: 0 auto; }
@@ -70,33 +80,36 @@
   .card { background: var(--surface-1); border: 1px solid var(--hairline); border-radius: 10px; padding: 16px; }
   .empty { max-width: 720px; margin: 40px auto; }
   .empty h1 { font-size: 22px; margin: 0 0 6px; }
-  .empty p { color: var(--text-secondary); margin: 0 0 18px; }
+  .empty > p { color: var(--text-secondary); margin: 0 0 18px; }
   .step { display: flex; gap: 14px; align-items: flex-start; padding: 14px 0; border-top: 1px solid var(--hairline); }
   .step .n { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--surface-2);
     display: grid; place-items: center; font-size: 12px; font-weight: 600; }
   .step h2 { font-size: 15px; margin: 0 0 2px; }
-  .step p { margin: 0 0 8px; font-size: 13px; }
+  .step p { margin: 0 0 8px; font-size: 13px; color: var(--text-secondary); }
+  .empty .foot { font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--hairline); padding-top: 12px; margin: 0; }
 
   .filters { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; font-size: 13px; color: var(--text-secondary); }
   .filters label { display: flex; gap: 6px; align-items: center; }
-  .filters input[type=date], .filters select { background: var(--surface-1); border: 1px solid var(--hairline); border-radius: 6px; padding: 4px 8px; }
+  .filters input, .filters select { background: var(--surface-1); border: 1px solid var(--hairline); border-radius: 6px; padding: 4px 8px; }
+  .filters input[type=search] { width: 220px; }
 
   figure { margin: 0 0 16px; }
   .chart-title { font-size: 13px; color: var(--text-secondary); margin: 0 0 6px; }
   svg text { font: 11px var(--sans); fill: var(--text-muted); }
   svg .grid line { stroke: var(--grid); }
-  svg .axis line, svg .axis path { stroke: var(--hairline); }
 
   table { width: 100%; border-collapse: collapse; background: var(--surface-1); border: 1px solid var(--hairline); border-radius: 10px; overflow: hidden; }
   th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
-  th { font-size: 12px; font-weight: 600; color: var(--text-secondary); background: var(--surface-1); cursor: pointer; user-select: none; }
+  th { font-size: 12px; font-weight: 600; color: var(--text-secondary); cursor: pointer; user-select: none; }
   th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.name { max-width: 260px; overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary); }
   th[aria-sort=ascending]::after { content: " ▲"; font-size: 9px; }
   th[aria-sort=descending]::after { content: " ▼"; font-size: 9px; }
   tbody tr { cursor: pointer; }
   tbody tr:hover { background: var(--surface-2); }
   tr.test td { color: var(--text-muted); }
   .tag { font-size: 11px; color: var(--text-muted); border: 1px solid var(--hairline); border-radius: 4px; padding: 0 4px; margin-left: 6px; }
+  .nothing { padding: 24px; text-align: center; color: var(--text-muted); }
 
   .detail-head { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
   .detail-head h1 { font-size: 20px; margin: 0; }
@@ -112,8 +125,7 @@
   .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin: 0 0 6px; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .panels { position: relative; }
-  .panels:focus-visible { outline-offset: 4px; }
-  .note { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+  .note { font-size: 12px; color: var(--text-muted); margin: 8px 0 0; }
 
   .tip { position: fixed; pointer-events: none; z-index: 20; background: var(--surface-1); border: 1px solid var(--hairline);
     border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.12); min-width: 180px; }
@@ -123,41 +135,67 @@
   .tip .v { font-weight: 600; font-variant-numeric: tabular-nums; }
   .tip .l { color: var(--text-muted); }
 
-  dialog { border: 1px solid var(--hairline); border-radius: 12px; padding: 20px; background: var(--surface-1); color: var(--text-primary); width: 380px; }
+  dialog { border: 1px solid var(--hairline); border-radius: 12px; padding: 20px; background: var(--surface-1); color: var(--text-primary); width: 400px; }
+  dialog.wide { width: min(720px, 92vw); max-height: 86vh; }
   dialog::backdrop { background: rgba(0,0,0,.35); }
   dialog h2 { margin: 0 0 6px; font-size: 17px; }
   dialog p { margin: 0 0 12px; font-size: 13px; color: var(--text-secondary); }
   dialog label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; }
-  dialog input { width: 100%; margin-top: 4px; padding: 7px 9px; border: 1px solid var(--hairline); border-radius: 6px; background: var(--surface-0); }
+  dialog input[type=email], dialog input[type=password], dialog input:not([type]) {
+    width: 100%; margin-top: 4px; padding: 7px 9px; border: 1px solid var(--hairline); border-radius: 6px; background: var(--surface-0); }
   dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
   .err { color: var(--critical); font-size: 13px; min-height: 1em; }
+
+  .settings section { border-top: 1px solid var(--hairline); padding: 14px 0; }
+  .settings section:first-of-type { border-top: 0; padding-top: 4px; }
+  .settings h3 { font-size: 13px; margin: 0 0 8px; }
+  .settings .choice { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-primary); margin: 0 0 8px; }
+  .settings .choice small { display: block; color: var(--text-muted); font-size: 12px; }
+  .settings .line { display: flex; gap: 10px; align-items: center; justify-content: space-between; font-size: 13px; margin: 0 0 8px; }
+  .settings .line span { color: var(--text-secondary); overflow-wrap: anywhere; }
+  .settings .buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .help { font-size: 13px; line-height: 1.55; }
+  .help h3 { font-size: 14px; margin: 18px 0 6px; }
+  .help h3:first-of-type { margin-top: 4px; }
+  .help p, .help li { color: var(--text-secondary); }
+  .help p { margin: 0 0 8px; }
+  .help dl { display: grid; grid-template-columns: 130px 1fr; gap: 6px 14px; margin: 0 0 8px; }
+  .help dt { font-weight: 600; }
+  .help dd { margin: 0; color: var(--text-secondary); }
+  .help-body { overflow-y: auto; max-height: calc(86vh - 110px); padding-right: 6px; }
 </style>
 </head>
 <body>
 <header class="bar">
   <div class="brand">bottomtime<span class="count" id="count"></span></div>
   <div class="actions">
-    <button id="btn-cloud" title="Read every dive Shearwater Cloud has on this Mac">Read Shearwater Cloud</button>
+    <button id="btn-cloud">Read Shearwater Cloud</button>
     <button id="btn-garmin">Garmin Connect</button>
     <button id="btn-files">Add files…</button>
     <button id="btn-export-all">Export all…</button>
+    <span class="sep"></span>
+    <button class="quiet" id="btn-help">Help</button>
+    <button class="quiet" id="btn-settings">Settings</button>
   </div>
 </header>
-<div class="status" id="status" hidden></div>
+<div class="banner" id="update" hidden><span class="grow" id="update-text"></span><button class="link" id="update-get">Download it</button><button class="link" id="update-hide">Not now</button></div>
+<div class="banner" id="status" hidden></div>
+<div class="banner" id="hint" hidden><span class="grow">Click any dive to see every computer's log on one timeline. <button class="link" id="hint-help">Help</button> explains each column.</span><button class="link" id="hint-ok">Got it</button></div>
 <input type="file" id="file-input" multiple accept=".fit,.db" hidden>
 
 <main>
   <section id="empty" class="empty card" hidden>
     <h1>Your dives, from every computer, on one timeline</h1>
-    <p>bottomtime reads the logs your dive computers already keep, lines up the ones that recorded the same dive, and keeps every channel they recorded, including GF99 and the deco ceiling. Everything stays on this Mac.</p>
+    <p>bottomtime reads the logs your dive computers already keep, lines up the ones that recorded the same dive, and keeps every channel they recorded, including GF99 and the deco ceiling that Shearwater's own exports leave out.</p>
     <div class="step"><div class="n">1</div><div>
       <h2>Shearwater</h2>
-      <p id="empty-cloud">If Shearwater Cloud is installed and synced, bottomtime reads its dives directly.</p>
+      <p id="empty-cloud"></p>
       <button class="primary" id="empty-btn-cloud">Read Shearwater Cloud</button>
     </div></div>
     <div class="step"><div class="n">2</div><div>
       <h2>Garmin Descent</h2>
-      <p>Sign in to Garmin Connect once and bottomtime downloads your dives. Your password goes only to Garmin.</p>
+      <p>Sign in to Garmin Connect once. bottomtime downloads the original file of every dive your watch has synced, and after that only the new ones. Your password goes only to Garmin.</p>
       <button id="empty-btn-garmin">Sign in to Garmin Connect</button>
     </div></div>
     <div class="step"><div class="n">3</div><div>
@@ -165,21 +203,16 @@
       <p>Add .fit files from a Garmin, or a .db file from Shearwater Cloud's File → Export → Export Database.</p>
       <button id="empty-btn-files">Add files…</button>
     </div></div>
+    <p class="foot">Everything stays on this Mac. <button class="link" id="empty-help">How bottomtime works</button></p>
   </section>
 
   <section id="list" hidden>
     <div class="filters">
+      <input type="search" id="f-search" placeholder="Search names and computers" aria-label="Search names and computers">
       <label>From <input type="date" id="f-from"></label>
       <label>To <input type="date" id="f-to"></label>
       <label><input type="checkbox" id="f-tests"> Include pool and test dives</label>
-      <label>Chart <select id="f-metric">
-        <option value="max_depth_m">Max depth (m)</option>
-        <option value="gf99_surf">GF99 at surfacing (%)</option>
-        <option value="gf99_max">Max GF99 (%)</option>
-        <option value="runtime_min">Runtime (min)</option>
-        <option value="deco_min">Time in deco (min)</option>
-        <option value="cns_pct">CNS (%)</option>
-      </select></label>
+      <label>Chart <select id="f-metric"></select></label>
     </div>
     <figure class="card">
       <p class="chart-title" id="across-title"></p>
@@ -193,7 +226,7 @@
 
   <section id="detail" hidden>
     <div class="detail-head">
-      <button id="back">← All dives</button>
+      <button id="back" title="Back to all dives (Esc)">← All dives</button>
       <h1 id="d-title"></h1>
       <span class="facts" id="d-facts"></span>
       <span class="spacer"></span>
@@ -213,7 +246,7 @@
 <dialog id="garmin">
   <div id="g-signin">
     <h2>Sign in to Garmin Connect</h2>
-    <p>bottomtime downloads your dives with your Garmin account. Your password goes only to Garmin; this Mac keeps a sign-in token, like the Garmin apps do.</p>
+    <p>bottomtime downloads your dives with your Garmin account. Your password goes only to Garmin; this Mac keeps a sign-in token, the way Garmin's own apps do.</p>
     <form id="g-form">
       <label>Email <input type="email" id="g-email" autocomplete="username" required></label>
       <label>Password <input type="password" id="g-password" autocomplete="current-password" required></label>
@@ -231,9 +264,98 @@
   </div>
   <div id="g-ready" hidden>
     <h2>Garmin Connect</h2>
-    <p>Signed in. Downloading fetches only the dives bottomtime doesn't have yet.</p>
+    <p id="g-who"></p>
     <div class="row"><button type="button" id="g-signout">Sign out</button><button type="button" class="g-close">Close</button><button class="primary" id="g-sync">Download new dives</button></div>
   </div>
+</dialog>
+
+<dialog id="settings" class="settings">
+  <h2 tabindex="-1" autofocus>Settings</h2>
+  <section>
+    <h3>Units</h3>
+    <label class="choice"><input type="radio" name="units" value="metric"> <span>Metric<small>Depth in metres, temperature in °C</small></span></label>
+    <label class="choice"><input type="radio" name="units" value="imperial"> <span>Imperial<small>Depth in feet, temperature in °F</small></span></label>
+  </section>
+  <section>
+    <h3>When bottomtime opens</h3>
+    <label class="choice"><input type="checkbox" id="s-check"> <span>Look for new dives<small>Reads Shearwater Cloud and checks Garmin Connect, if you're signed in.</small></span></label>
+    <label class="choice"><input type="checkbox" id="s-updates"> <span>Tell me when a new version is out<small>Asks GitHub, where bottomtime is published. Nothing about your dives is sent.</small></span></label>
+  </section>
+  <section>
+    <h3>Accounts</h3>
+    <div class="line"><span id="s-cloud"></span></div>
+    <div class="line"><span id="s-garmin"></span><button id="s-garmin-btn"></button></div>
+  </section>
+  <section>
+    <h3>Your data</h3>
+    <div class="line"><span id="s-dir"></span><button id="s-finder">Show in Finder</button></div>
+    <p>bottomtime keeps an untouched copy of every file it reads, and builds your dive list from those copies.</p>
+    <div class="buttons">
+      <button id="s-rebuild" title="Use this if something looks wrong after an update">Rebuild from saved files</button>
+      <button class="danger" id="s-delete">Delete everything…</button>
+    </div>
+    <div class="err" id="s-err"></div>
+  </section>
+  <section>
+    <h3>About</h3>
+    <div class="line"><span id="s-version"></span><span class="buttons"><button class="link" id="s-repo">Source code</button><button class="link" id="s-report">Report a problem</button></span></div>
+  </section>
+  <div class="row"><button class="primary" id="s-close">Done</button></div>
+</dialog>
+
+<dialog id="confirm-delete">
+  <h2>Delete everything in bottomtime?</h2>
+  <p>This deletes every dive and every saved file in bottomtime, signs out of Garmin Connect, and resets the settings. Your dives in Shearwater Cloud and Garmin Connect aren't touched, so you can read them again.</p>
+  <div class="row"><button id="del-cancel">Cancel</button><button class="primary" id="del-ok">Delete everything</button></div>
+</dialog>
+
+<dialog id="help" class="wide help">
+  <h2 tabindex="-1" autofocus>How bottomtime works</h2>
+  <div class="help-body">
+    <h3>Getting your dives in</h3>
+    <p><b>Shearwater.</b> bottomtime reads Shearwater Cloud's own database on this Mac, so there is nothing to export. Open Shearwater Cloud first and make sure it shows your latest dives, then click Read Shearwater Cloud. If Shearwater Cloud isn't on this Mac, export a database from it on another computer (File → Export → Export Database) and add the .db file.</p>
+    <p><b>Garmin.</b> Sign in to Garmin Connect once. bottomtime downloads the original file of every dive your watch synced, and after that only the new ones. Dives that were uploaded to Garmin Connect from another brand's computer are skipped, because bottomtime reads those computers directly and gets more from them.</p>
+    <p><b>Files.</b> Add files… takes .fit files from a Garmin and .db files exported from Shearwater Cloud.</p>
+    <p>Reading the same dives twice is harmless: bottomtime recognises dives it already has. Settings can make it look for new dives each time it opens.</p>
+
+    <h3>The dive list</h3>
+    <dl>
+      <dt>#</dt><dd>Dives numbered in date order. Pool and test dives, shorter than 2 minutes or shallower than 2 m, aren't numbered and are hidden unless you include them.</dd>
+      <dt>Name</dt><dd>The site you typed in Shearwater Cloud, or the name Garmin Connect gave the dive if it says more than "Single-Gas Dive".</dd>
+      <dt>Runtime</dt><dd>From the Garmin when it logged the dive, since its clock carries the time zone. The Garmin keeps recording through short surface intervals, so its runtime can run longer than the Shearwater's.</dd>
+      <dt>Max depth</dt><dd>The deepest reading from any computer on the dive.</dd>
+      <dt>Deco</dt><dd>Minutes a computer showed a required stop. When two computers disagree, the longer one.</dd>
+      <dt>Max GF99</dt><dd>The highest GF99 the Shearwater showed during the dive.</dd>
+      <dt>GF99 surfacing</dt><dd>The highest GF99 in the last ten minutes of the dive. It matches the end-of-dive GF99 that Shearwater Cloud calculates.</dd>
+      <dt>CNS</dt><dd>The highest oxygen toxicity percentage any computer showed.</dd>
+      <dt>Computers</dt><dd>Every computer that logged the dive.</dd>
+    </dl>
+    <p>Click a column to sort by it. The chart above the list plots any of these columns for each dive by date; pick the column with Chart, and click a dot to open that dive.</p>
+
+    <h3>Reading a dive</h3>
+    <p>Each computer gets its own colour. The solid line is depth, and the dashed line in the same colour is the deco ceiling the Shearwater calculated. Below are GF99 and ppO2 on the same time axis. Move the pointer over the charts, or use the arrow keys, to read every computer at the same moment.</p>
+    <p>No two dive computers' clocks agree. bottomtime takes the time zone from the Garmin, then slides one depth profile against the other until they match best. The seconds left over are shown under the chart. Neither log is changed, merged, or resampled.</p>
+
+    <h3>Terms</h3>
+    <dl>
+      <dt>GF99</dt><dd>How close your leading tissue is to its Bühlmann limit at your current depth, as a percentage. 100 means you are at the limit.</dd>
+      <dt>Ceiling</dt><dd>The shallowest depth the computer would let you ascend to right now.</dd>
+      <dt>@+5</dt><dd>What your time to surface would be if you stayed five more minutes at this depth.</dd>
+      <dt>TTS</dt><dd>Time to surface, including every stop.</dd>
+      <dt>NDL</dt><dd>No-decompression limit: minutes left before you'd need a stop.</dd>
+      <dt>CNS</dt><dd>Your oxygen exposure as a percentage of the allowed limit.</dd>
+      <dt>ppO2</dt><dd>Partial pressure of oxygen in what you are breathing.</dd>
+    </dl>
+
+    <h3>Your data</h3>
+    <p>Everything stays on this Mac, in <span id="help-dir"></span>. bottomtime keeps an untouched copy of every file it reads, Garmin's original files and each Shearwater Cloud database, so your dives can always be rebuilt from them.</p>
+    <p>Export all saves every dive as a CSV file you can open in Excel or Numbers, plus a dives.csv with one row per dive. Each dive's file has every sample from every computer, with the units in the column names. Values in exports are always metric.</p>
+    <p>bottomtime sends nothing about your dives anywhere. It contacts Garmin Connect only to download your dives, and GitHub only to check for a new version, which you can turn off in Settings.</p>
+
+    <h3>Something wrong?</h3>
+    <p>bottomtime is open source and made by one diver. <button class="link" id="help-report">Report a problem</button> opens a page on GitHub where you can describe it.</p>
+  </div>
+  <div class="row"><button class="primary" id="help-close">Close</button></div>
 </dialog>
 
 <script>
@@ -244,6 +366,7 @@ const color = (i) => getComputedStyle(document.documentElement).getPropertyValue
 const token = location.hash.slice(1);
 let overview = null;
 let sortKey = "start_time_utc", sortDir = -1;
+let lastError = null;
 
 // ---- talking to Python ----
 async function call(name, ...args) {
@@ -255,27 +378,45 @@ async function call(name, ...args) {
   return r.json();
 }
 const native = () => overview && overview.native;
+const settings = () => (overview ? overview.settings : {units: "metric"});
 
-function showStatus(text, kind) {
+// ---- the status line ----
+function showStatus(text, kind, detail) {
   const el = $("status");
   el.hidden = !text;
-  el.className = "status" + (kind === "error" ? " error" : "");
+  el.className = "banner" + (kind === "error" ? " error" : "");
   el.textContent = "";
+  if (!text) return;
   if (kind === "busy") { const s = document.createElement("span"); s.className = "spin"; el.append(s); }
-  el.append(text || "");
+  const t = document.createElement("span"); t.className = "grow"; t.textContent = text; el.append(t);
+  if (kind === "error") {
+    lastError = {message: text, detail: detail || ""};
+    if (detail) {
+      const pre = document.createElement("pre"); pre.textContent = detail; pre.hidden = true;
+      const more = document.createElement("button"); more.className = "link"; more.textContent = "Details";
+      more.onclick = () => { pre.hidden = !pre.hidden; };
+      el.append(more);
+      const rep = document.createElement("button"); rep.className = "link"; rep.textContent = "Report a problem";
+      rep.onclick = () => call("report_problem", text, detail);
+      el.append(rep, pre);
+    }
+    const x = document.createElement("button"); x.className = "link"; x.textContent = "Dismiss";
+    x.onclick = () => showStatus("");
+    el.append(x);
+  }
 }
 
 async function startJob(promise) {
   let res;
   try { res = await promise; } catch (e) { return showStatus(String(e.message || e), "error"); }
-  if (!res || res.cancelled) return;
+  if (!res || res.cancelled || res.idle) return;
   if (res.error) return showStatus(res.error, "error");
   setBusy(true);
   for (;;) {
     const p = await call("progress");
     if (!p.busy) {
       setBusy(false);
-      if (p.error) showStatus(p.error, "error"); else showStatus("");
+      if (p.error) showStatus(p.error, "error", p.detail); else showStatus("");
       return refresh();
     }
     showStatus(p.message + "…", "busy");
@@ -283,10 +424,11 @@ async function startJob(promise) {
   }
 }
 function setBusy(on) {
-  for (const b of document.querySelectorAll("header button, .empty button")) b.disabled = on || b.dataset.off === "1";
+  for (const b of document.querySelectorAll("header .actions button:not(.quiet), .empty button, #s-rebuild, #s-delete"))
+    b.disabled = on || b.dataset.off === "1";
 }
 
-// ---- formatting ----
+// ---- formatting and units ----
 const pad = (n) => String(n).padStart(2, "0");
 function localDate(d) {
   const t = new Date(d.start_time_utc.replace(" ", "T") + "Z");
@@ -302,34 +444,56 @@ function fmtDur(s) {
   return h ? `${h}:${pad(m)}:${pad(x)}` : `${m}:${pad(x)}`;
 }
 const num = (v, d = 0) => (v == null ? "" : Number(v).toFixed(d));
+const imperial = () => settings().units === "imperial";
+const depthUnit = () => (imperial() ? "ft" : "m");
+const toDepth = (m) => (m == null ? null : imperial() ? m * 3.28084 : m);
+const toTemp = (c) => (c == null ? null : imperial() ? c * 9 / 5 + 32 : c);
+const fmtDepth = (m, dp = 1) => (m == null ? "" : num(toDepth(m), imperial() ? 0 : dp) + " " + depthUnit());
+const MODES = {
+  oc_tec: "OC tec", oc_rec: "OC rec", cc: "CC", cc2: "CC", sc: "SC", gauge: "Gauge", ppo2: "ppO2 display",
+  freedive: "Freedive", avelo: "Avelo", single_gas_diving: "Single-gas", multi_gas_diving: "Multi-gas",
+  ccr_diving: "CCR", gauge_diving: "Gauge", apnea_diving: "Apnea", apnea_hunting: "Apnea", diving: "Dive",
+};
+const fmtMode = (m) => (m ? MODES[m] || m.replace(/_/g, " ") : "");
 
 // ---- list ----
 const COLUMNS = [
-  {key: "number", label: "#", num: true, get: (d) => d.number, show: (d) => d.number ?? ""},
+  {key: "number", label: "#", num: true, get: (d) => d.number, show: (d) => d.number ?? "",
+   help: "Dives in date order. Pool and test dives aren't numbered."},
   {key: "start_time_utc", label: "Date", get: (d) => d.start_time_utc,
-   show: (d) => { const t = localDate(d); return `${fmtDate(t)} ${fmtClock(t)}`; }},
-  {key: "duration_s", label: "Runtime", num: true, get: (d) => d.duration_s, show: (d) => fmtDur(d.duration_s)},
-  {key: "max_depth_m", label: "Max depth", num: true, get: (d) => d.max_depth_m, show: (d) => d.max_depth_m == null ? "" : num(d.max_depth_m, 1) + " m"},
-  {key: "deco_min", label: "Deco", num: true, get: (d) => d.deco_min, show: (d) => d.deco_min >= 0.5 ? num(d.deco_min) + " min" : ""},
-  {key: "gf99_max", label: "Max GF99", num: true, get: (d) => d.gf99_max, show: (d) => num(d.gf99_max)},
-  {key: "gf99_surf", label: "GF99 surfacing", num: true, get: (d) => d.gf99_surf, show: (d) => num(d.gf99_surf)},
-  {key: "cns_pct", label: "CNS", num: true, get: (d) => d.cns_pct, show: (d) => d.cns_pct == null ? "" : num(d.cns_pct) + "%"},
-  {key: "mode", label: "Mode", get: (d) => d.mode, show: (d) => d.mode || ""},
+   show: (d) => { const t = localDate(d); return `${fmtDate(t)} ${fmtClock(t)}`; }, help: "Local time where you dived."},
+  {key: "name", label: "Name", get: (d) => d.name, show: (d) => d.name || "", cls: "name",
+   help: "Your Shearwater site name, or Garmin Connect's name for the dive."},
+  {key: "duration_s", label: "Runtime", num: true, get: (d) => d.duration_s, show: (d) => fmtDur(d.duration_s),
+   help: "From the Garmin when it logged the dive. It records through short surface intervals, so it can run longer."},
+  {key: "max_depth_m", label: "Max depth", num: true, get: (d) => d.max_depth_m, show: (d) => fmtDepth(d.max_depth_m),
+   help: "The deepest reading from any computer on the dive."},
+  {key: "deco_min", label: "Deco", num: true, get: (d) => d.deco_min, show: (d) => d.deco_min >= 0.5 ? num(d.deco_min) + " min" : "",
+   help: "Minutes a computer showed a required stop."},
+  {key: "gf99_max", label: "Max GF99", num: true, get: (d) => d.gf99_max, show: (d) => num(d.gf99_max),
+   help: "The highest GF99 the Shearwater showed during the dive."},
+  {key: "gf99_surf", label: "GF99 surfacing", num: true, get: (d) => d.gf99_surf, show: (d) => num(d.gf99_surf),
+   help: "The highest GF99 in the last ten minutes. It matches the end-of-dive GF99 Shearwater Cloud calculates."},
+  {key: "cns_pct", label: "CNS", num: true, get: (d) => d.cns_pct, show: (d) => d.cns_pct == null ? "" : num(d.cns_pct) + "%",
+   help: "The highest oxygen exposure any computer showed, as a percentage of the limit."},
+  {key: "mode", label: "Mode", get: (d) => d.mode, show: (d) => fmtMode(d.mode)},
   {key: "computers", label: "Computers", get: (d) => d.computers.join(" + "), show: (d) => d.computers.join(" + ")},
 ];
 const METRICS = {
-  max_depth_m: {label: "Max depth (m)", get: (d) => d.max_depth_m, down: true},
-  gf99_surf: {label: "GF99 at surfacing (%)", get: (d) => d.gf99_surf},
-  gf99_max: {label: "Max GF99 (%)", get: (d) => d.gf99_max},
-  runtime_min: {label: "Runtime (min)", get: (d) => d.duration_s == null ? null : d.duration_s / 60},
-  deco_min: {label: "Time in deco (min)", get: (d) => d.deco_min},
-  cns_pct: {label: "CNS (%)", get: (d) => d.cns_pct},
+  max_depth_m: {label: () => `Max depth (${depthUnit()})`, get: (d) => toDepth(d.max_depth_m), down: true, dp: () => (imperial() ? 0 : 1)},
+  gf99_surf: {label: () => "GF99 at surfacing (%)", get: (d) => d.gf99_surf},
+  gf99_max: {label: () => "Max GF99 (%)", get: (d) => d.gf99_max},
+  runtime_min: {label: () => "Runtime (min)", get: (d) => d.duration_s == null ? null : d.duration_s / 60},
+  deco_min: {label: () => "Time in deco (min)", get: (d) => d.deco_min},
+  cns_pct: {label: () => "CNS (%)", get: (d) => d.cns_pct},
 };
 
 function filtered() {
   const from = $("f-from").value, to = $("f-to").value, tests = $("f-tests").checked;
+  const q = $("f-search").value.trim().toLowerCase();
   return overview.dives.filter((d) => {
     if (d.is_test && !tests) return false;
+    if (q && !`${d.name || ""} ${d.computers.join(" ")} ${d.number ?? ""}`.toLowerCase().includes(q)) return false;
     const day = localDate(d).toISOString().slice(0, 10);
     return (!from || day >= from) && (!to || day <= to);
   });
@@ -337,12 +501,19 @@ function filtered() {
 
 function renderList() {
   const dives = filtered();
+  const metric = $("f-metric");
+  const chosen = metric.value || "max_depth_m";
+  metric.textContent = "";
+  for (const [k, m] of Object.entries(METRICS)) { const o = document.createElement("option"); o.value = k; o.textContent = m.label(); metric.append(o); }
+  metric.value = chosen;
+
   const head = $("thead");
   head.textContent = "";
   for (const c of COLUMNS) {
     const th = document.createElement("th");
     th.textContent = c.label;
     if (c.num) th.className = "num";
+    if (c.help) th.title = c.help;
     th.tabIndex = 0;
     if (c.key === sortKey) th.setAttribute("aria-sort", sortDir > 0 ? "ascending" : "descending");
     const sort = () => { sortDir = c.key === sortKey ? -sortDir : (c.num ? -1 : 1); sortKey = c.key; renderList(); };
@@ -353,11 +524,16 @@ function renderList() {
   const col = COLUMNS.find((c) => c.key === sortKey);
   dives.sort((a, b) => {
     const x = col.get(a), y = col.get(b);
-    if (x == null) return 1; if (y == null) return -1;
+    if (x == null || x === "") return 1; if (y == null || y === "") return -1;
     return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
   });
   const body = $("tbody");
   body.textContent = "";
+  if (!dives.length) {
+    const tr = document.createElement("tr"), td = document.createElement("td");
+    td.colSpan = COLUMNS.length; td.className = "nothing"; td.textContent = "No dives match these filters.";
+    tr.append(td); body.append(tr);
+  }
   for (const d of dives) {
     const tr = document.createElement("tr");
     if (d.is_test) tr.className = "test";
@@ -366,6 +542,7 @@ function renderList() {
       const td = document.createElement("td");
       td.textContent = c.show(d);
       if (c.num) td.className = "num";
+      if (c.cls) { td.className = c.cls; td.title = c.show(d); }
       if (c.key === "number" && d.is_test) { const t = document.createElement("span"); t.className = "tag"; t.textContent = "pool/test"; td.append(t); }
       tr.append(td);
     }
@@ -385,7 +562,7 @@ function el(name, attrs, parent) {
   return n;
 }
 function ticks(lo, hi, count) {
-  const span = hi - lo || 1, raw = span / count, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const span = hi - lo || 1, raw = span / Math.max(count, 1), mag = Math.pow(10, Math.floor(Math.log10(raw)));
   const step = [1, 2, 5, 10].map((m) => m * mag).find((s) => span / s <= count) || 10 * mag;
   const out = [];
   for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(10));
@@ -398,7 +575,7 @@ function renderAcross(dives) {
   const svg = $("across");
   svg.textContent = "";
   const m = METRICS[$("f-metric").value];
-  $("across-title").textContent = `${m.label} for each dive, by date. Click a dot to open the dive.`;
+  $("across-title").textContent = `${m.label()} for each dive, by date. Click a dot to open the dive.`;
   const pts = dives.map((d) => ({d, x: localDate(d).getTime(), y: m.get(d)})).filter((p) => p.y != null);
   const W = svg.clientWidth || 800, H = 220, L = 44, R = 12, T = 10, B = 26;
   if (!pts.length) { el("text", {x: L, y: H / 2}, svg).textContent = "No dives with this value in the selected range."; return; }
@@ -437,8 +614,9 @@ function renderAcross(dives) {
     ring.setAttribute("cx", p.cx); ring.setAttribute("cy", p.cy); ring.setAttribute("visibility", "visible");
     svg.style.cursor = "pointer";
     const t = localDate(p.d);
-    showTip(e, `${p.d.number ? "Dive " + p.d.number : "Pool/test dive"} · ${fmtDate(t)}`,
-      [{rows: [[null, m.label, num(p.y, m.label.includes("depth") ? 1 : 0)], [null, "Computers", p.d.computers.join(" + ")]]}]);
+    const rows = [[null, m.label(), num(p.y, m.dp ? m.dp() : 0)], [null, "Computers", p.d.computers.join(" + ")]];
+    if (p.d.name) rows.unshift([null, "Name", p.d.name]);
+    showTip(e, `${p.d.number ? "Dive " + p.d.number : "Pool/test dive"} · ${fmtDate(t)}`, [{rows}]);
   };
   svg.onpointerleave = () => { ring.setAttribute("visibility", "hidden"); hideTip(); };
   svg.onclick = (e) => { const p = nearest(e); if (p) openDive(p.d.id); };
@@ -475,41 +653,60 @@ async function openDive(id) {
   hideTip();
   current = await call("dive", id);
   $("list").hidden = true; $("empty").hidden = true; $("detail").hidden = false;
+  if (!settings().hint_seen) dismissHint();
   window.scrollTo(0, 0);
+  renderDive();
+}
+function renderDive() {
   const d = current, t = localDate(d);
-  $("d-title").textContent = d.number ? `Dive ${d.number}` : "Pool or test dive";
-  $("d-facts").textContent = `${fmtDate(t)} ${fmtClock(t)} · ${fmtDur(d.duration_s)} · ${num(d.max_depth_m, 1)} m`;
+  $("d-title").textContent = (d.number ? `Dive ${d.number}` : "Pool or test dive") + (d.name ? ` · ${d.name}` : "");
+  $("d-facts").textContent = `${fmtDate(t)} ${fmtClock(t)} · ${fmtDur(d.duration_s)} · ${fmtDepth(d.max_depth_m)}`;
   const logs = $("d-logs");
   logs.textContent = "";
   d.logs.forEach((log, i) => {
     const card = document.createElement("div"); card.className = "card log";
     const h = document.createElement("h3");
     const k = document.createElement("span"); k.className = "key"; k.style.borderTopColor = color(i);
-    h.append(k, `${log.computer}`);
+    h.append(k, log.computer);
     const dl = document.createElement("dl");
     const add = (a, b) => { if (!b) return; const x = document.createElement("dt"); x.textContent = a; const y = document.createElement("dd"); y.textContent = b; dl.append(x, y); };
     add("Serial", log.serial && String(log.serial));
     add("Started", log.start_local && log.start_local.slice(11, 19) + " on its clock");
     add("Runtime", fmtDur(log.duration_s));
-    add("Max depth", log.max_depth_m != null && num(log.max_depth_m, 1) + " m");
-    add("Mode", log.mode);
+    add("Max depth", fmtDepth(log.max_depth_m));
+    add("Mode", fmtMode(log.mode));
     add("Gases", log.gases.join(", "));
     card.append(h, dl); logs.append(card);
   });
   const m = d.matches;
   $("d-note").textContent = m.length
-    ? "Lined up from the logs' own clocks: " + m.map((x) => `${x.residual_skew_s >= 0 ? "+" : ""}${x.residual_skew_s} s, depth-profile match ${num(x.xcorr_score, 3)}`).join("; ") + ". Neither log is resampled or merged."
+    ? "Lined up from the logs' own clocks, then by matching the depth profiles: " + m.map((x) => `${x.residual_skew_s >= 0 ? "+" : ""}${x.residual_skew_s} s left over, profile match ${num(x.xcorr_score, 3)}`).join("; ") + ". Neither log is changed or resampled."
     : d.logs.length > 1 ? "" : "Recorded by one computer.";
   renderPanels();
 }
 
 const PANELS = [
-  {key: "depth", label: "Depth (m)", down: true, lines: [["depth", false], ["ceiling", true]], height: 280},
-  {key: "gf99", label: "GF99 (%)", lines: [["gf99", false]], height: 150},
-  {key: "ppo2", label: "ppO2", lines: [["ppo2", false]], height: 150},
+  {key: "depth", label: () => `Depth (${depthUnit()})`, down: true, lines: [["depth", false], ["ceiling", true]], height: 280},
+  {key: "gf99", label: () => "GF99 (%)", lines: [["gf99", false]], height: 150},
+  {key: "ppo2", label: () => "ppO2", lines: [["ppo2", false]], height: 150},
 ];
 const LABELS = {depth: "depth", ceiling: "ceiling", gf99: "GF99", ppo2: "ppO2", temp: "temp", stop: "next stop", tts: "TTS", at5: "@+5", ndl: "NDL", cns: "CNS"};
-const UNITS = {depth: [" m", 1], ceiling: [" m", 0], gf99: ["", 0], ppo2: ["", 2], temp: [" °C", 0], stop: [" m", 0], tts: [" min", 0], at5: [" min", 0], ndl: [" min", 0], cns: ["%", 0]};
+const DEPTHS = new Set(["depth", "ceiling", "stop"]);
+function value(ch, v) {
+  if (v == null) return null;
+  if (DEPTHS.has(ch)) return toDepth(v);
+  if (ch === "temp") return toTemp(v);
+  return v;
+}
+function shown(ch, v) {
+  const x = value(ch, v);
+  if (DEPTHS.has(ch)) return num(x, ch === "depth" && !imperial() ? 1 : 0) + " " + depthUnit();
+  if (ch === "temp") return num(x) + (imperial() ? " °F" : " °C");
+  if (ch === "ppo2") return num(x, 2);
+  if (ch === "cns") return num(x) + "%";
+  if (ch === "gf99") return num(x);
+  return num(x) + " min";
+}
 
 function renderPanels() {
   const d = current, box = $("panels");
@@ -528,13 +725,13 @@ function renderPanels() {
   const t0 = Math.min(...all), t1 = Math.max(...all);
   const W = box.clientWidth || 900, L = 52, R = 16;
   const sx = scale(t0, t1, L, W - R);
-  const shown = PANELS.filter((p) => d.logs.some((l) => p.lines.some(([ch]) => l.series[ch])));
+  const visible = PANELS.filter((p) => d.logs.some((l) => p.lines.some(([ch]) => l.series[ch])));
   const cross = [];
-  shown.forEach((p, pi) => {
-    const last = pi === shown.length - 1, H = p.height + (last ? 26 : 0), B = last ? 26 : 6, T = 22;
-    const svg = el("svg", {width: "100%", height: H, role: "img", "aria-label": p.label}, box);
+  visible.forEach((p, pi) => {
+    const last = pi === visible.length - 1, H = p.height + (last ? 26 : 0), B = last ? 26 : 6, T = 22;
+    const svg = el("svg", {width: "100%", height: H, role: "img", "aria-label": p.label()}, box);
     let hi = 0;
-    for (const l of d.logs) for (const [ch] of p.lines) for (const v of l.series[ch] || []) if (v != null && v > hi) hi = v;
+    for (const l of d.logs) for (const [ch] of p.lines) for (const v of l.series[ch] || []) { const x = value(ch, v); if (x != null && x > hi) hi = x; }
     hi = hi * 1.05 || 1;
     const sy = p.down ? scale(0, hi, T, H - B) : scale(0, hi, H - B, T);
     const grid = el("g", {class: "grid"}, svg);
@@ -542,14 +739,14 @@ function renderPanels() {
       el("line", {x1: L, x2: W - R, y1: sy(v), y2: sy(v)}, grid);
       el("text", {x: L - 6, y: sy(v) + 4, "text-anchor": "end"}, svg).textContent = v;
     }
-    el("text", {x: L, y: 12}, svg).textContent = p.label;
+    el("text", {x: L, y: 12}, svg).textContent = p.label();
     d.logs.forEach((log, i) => {
       for (const [ch, dash] of p.lines) {
         const ys = log.series[ch];
         if (!ys) continue;
         let path = "", pen = false;
         log.series.t.forEach((t, j) => {
-          const v = ys[j];
+          const v = value(ch, ys[j]);
           if (v == null) { pen = false; return; }
           path += (pen ? "L" : "M") + sx(t).toFixed(1) + " " + sy(v).toFixed(1);
           pen = true;
@@ -584,8 +781,7 @@ function renderPanels() {
       if (j >= 0) for (const ch of Object.keys(LABELS)) {
         const v = log.series[ch] && log.series[ch][j];
         if (v == null) continue;
-        const [u, dp] = UNITS[ch];
-        rows.push([ch === "depth" || ch === "ceiling" ? color(i) : null, LABELS[ch], num(v, dp) + u, ch === "ceiling"]);
+        rows.push([ch === "depth" || ch === "ceiling" ? color(i) : null, LABELS[ch], shown(ch, v), ch === "ceiling"]);
       }
       if (!rows.length) rows.push([null, "not recording", ""]);
       return {who: log.computer, rows};
@@ -605,6 +801,8 @@ function renderPanels() {
   box.onblur = () => hideTip();
 }
 
+function backToList() { $("detail").hidden = true; current = null; hideTip(); refresh(); }
+
 // ---- page ----
 async function refresh() {
   overview = await call("overview");
@@ -618,15 +816,18 @@ async function refresh() {
     b.title = overview.shearwater_cloud ? "Read every dive Shearwater Cloud has on this Mac" : "Shearwater Cloud's desktop app isn't installed on this Mac";
   }
   $("empty-cloud").textContent = overview.shearwater_cloud
-    ? "Shearwater Cloud is installed on this Mac, so bottomtime can read its dives directly. Sync Cloud with your computer first."
-    : "Shearwater Cloud's desktop app isn't on this Mac. Install it and sync, or use step 3 with an exported .db file.";
+    ? "Shearwater Cloud is installed on this Mac, so bottomtime can read its dives directly. Make sure it shows your latest dives first."
+    : "Shearwater Cloud's desktop app isn't on this Mac. Install it from Shearwater's website and sync your computer, or use step 3 with an exported .db file.";
   $("btn-garmin").textContent = overview.garmin_signed_in ? "Download Garmin dives" : "Garmin Connect";
   const has = overview.dives.length > 0;
   $("empty").hidden = has || !$("detail").hidden;
   if ($("detail").hidden) $("list").hidden = !has;
   $("btn-export-all").disabled = !has;
-  if (has) renderList();
+  $("hint").hidden = !has || settings().hint_seen || !$("detail").hidden;
+  if (has && $("detail").hidden) renderList();
+  if (current) renderDive();
 }
+async function dismissHint() { $("hint").hidden = true; overview.settings = await call("set_setting", "hint_seen", true); }
 
 function chooseFiles() {
   if (native()) return startJob(call("choose_files"));
@@ -643,9 +844,12 @@ $("file-input").onchange = async (e) => {
 };
 function download(path) { const a = document.createElement("a"); a.href = path + "?t=" + token; a.download = ""; a.click(); }
 
+// ---- Garmin ----
 function openGarmin() {
   for (const id of ["g-signin", "g-mfa", "g-ready"]) $(id).hidden = true;
   $(overview.garmin_signed_in ? "g-ready" : "g-signin").hidden = false;
+  const who = settings().garmin_account;
+  $("g-who").textContent = (who ? `Signed in as ${who}. ` : "Signed in. ") + "Downloading fetches only the dives bottomtime doesn't have yet.";
   $("g-err").textContent = ""; $("g-mfa-err").textContent = "";
   $("garmin").showModal();
 }
@@ -669,12 +873,64 @@ $("g-sync").onclick = () => { $("garmin").close(); startJob(call("garmin_sync"))
 $("g-signout").onclick = async () => { await call("garmin_sign_out"); $("garmin").close(); refresh(); };
 for (const b of document.querySelectorAll(".g-close")) b.onclick = () => $("garmin").close();
 
+// ---- settings ----
+function openSettings() {
+  const s = settings();
+  for (const r of document.querySelectorAll("input[name=units]")) r.checked = r.value === s.units;
+  $("s-check").checked = s.check_on_open;
+  $("s-updates").checked = s.check_updates;
+  $("s-cloud").textContent = overview.shearwater_cloud
+    ? `Shearwater Cloud: reading the database for ${overview.shearwater_account}`
+    : "Shearwater Cloud: not installed on this Mac";
+  $("s-garmin").textContent = overview.garmin_signed_in
+    ? `Garmin Connect: signed in${s.garmin_account ? " as " + s.garmin_account : ""}` : "Garmin Connect: not signed in";
+  $("s-garmin-btn").textContent = overview.garmin_signed_in ? "Sign out" : "Sign in…";
+  $("s-dir").textContent = overview.data_dir;
+  $("s-finder").hidden = !native();
+  $("s-version").textContent = `bottomtime ${overview.version}`;
+  $("s-err").textContent = "";
+  $("settings").showModal();
+}
+async function save(key, val) { overview.settings = await call("set_setting", key, val); }
+for (const r of document.querySelectorAll("input[name=units]")) r.onchange = async () => { await save("units", r.value); refresh(); };
+$("s-check").onchange = (e) => save("check_on_open", e.target.checked);
+$("s-updates").onchange = (e) => save("check_updates", e.target.checked);
+$("s-garmin-btn").onclick = async () => {
+  if (overview.garmin_signed_in) { await call("garmin_sign_out"); await refresh(); openSettings(); }
+  else { $("settings").close(); openGarmin(); }
+};
+$("s-finder").onclick = () => call("show_data_folder");
+$("s-rebuild").onclick = () => { $("settings").close(); startJob(call("rebuild_store")); };
+$("s-delete").onclick = () => $("confirm-delete").showModal();
+$("del-cancel").onclick = () => $("confirm-delete").close();
+$("del-ok").onclick = async () => {
+  const r = await call("delete_everything");
+  $("confirm-delete").close();
+  if (r.error) { $("s-err").textContent = r.error; return; }
+  $("settings").close(); backToList();
+};
+$("s-repo").onclick = () => call("open_link", "repo");
+$("s-report").onclick = $("help-report").onclick = () => call("report_problem", lastError ? lastError.message : "", lastError ? lastError.detail : "");
+$("s-close").onclick = () => $("settings").close();
+
+// ---- help ----
+function openHelp() {
+  $("help-dir").textContent = overview.data_dir;
+  $("help").showModal();
+  document.querySelector("#help .help-body").scrollTop = 0;
+}
+$("help-close").onclick = () => $("help").close();
+
+// ---- wiring ----
 $("btn-cloud").onclick = $("empty-btn-cloud").onclick = () => startJob(call("import_shearwater_cloud"));
 $("btn-garmin").onclick = $("empty-btn-garmin").onclick = openGarmin;
 $("btn-files").onclick = $("empty-btn-files").onclick = chooseFiles;
+$("btn-help").onclick = $("empty-help").onclick = $("hint-help").onclick = openHelp;
+$("btn-settings").onclick = openSettings;
+$("hint-ok").onclick = dismissHint;
 $("btn-export-all").onclick = async () => {
   if (!native()) return download("/export/all.zip");
-  showStatus("Writing every dive…", "busy");
+  showStatus("Writing every dive", "busy");
   const r = await call("export_all");
   showStatus(r.path ? `Saved ${r.path}` : "");
 };
@@ -683,14 +939,26 @@ $("d-export").onclick = async () => {
   const r = await call("export_dive", current.id);
   if (r.path) showStatus(`Saved ${r.path}`);
 };
-$("back").onclick = () => { $("detail").hidden = true; current = null; hideTip(); refresh(); };
+$("back").onclick = backToList;
+addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && current && !document.querySelector("dialog[open]")) backToList();
+});
+$("update-get").onclick = () => call("open_link", "releases");
+$("update-hide").onclick = () => { $("update").hidden = true; };
+$("f-search").oninput = renderList;
 for (const id of ["f-from", "f-to", "f-tests", "f-metric"]) $(id).onchange = renderList;
 let resizeTimer;
 addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => (current ? renderPanels() : overview && overview.dives.length && renderList()), 150); });
 
-if (token) refresh();
-else if (window.pywebview && window.pywebview.api) refresh();
-else addEventListener("pywebviewready", refresh);
+async function start() {
+  await refresh();
+  startJob(call("startup"));
+  const u = await call("check_for_update");
+  if (u.latest) { $("update-text").textContent = `bottomtime ${u.latest} is out. You have ${overview.version}.`; $("update").hidden = false; }
+}
+if (token) start();
+else if (window.pywebview && window.pywebview.api) start();
+else addEventListener("pywebviewready", start);
 </script>
 </body>
 </html>

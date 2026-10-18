@@ -5,8 +5,8 @@
 
 The UI is one HTML file, app_ui/index.html. It calls the public methods of
 Api, through pywebview's bridge in the window or POST /api/<method> in the
-browser. The store and its archive live in the app's data folder, so the app
-never needs the diver to know where anything is.
+browser. The store, its archive, the Garmin sign-in and the settings live in
+the app's data folder, so the diver never needs to know where anything is.
 """
 
 from __future__ import annotations
@@ -14,22 +14,30 @@ from __future__ import annotations
 import base64
 import io
 import json
+import platform
 import secrets
+import shutil
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import threading
 import time
 import traceback
+import urllib.parse
+import urllib.request
 import zipfile
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from . import __version__
 from .api import dive_summaries, load_dive, source_logs, write_dive_csv
 from .store import db as store_db
 
 UI = Path(__file__).parent / "app_ui" / "index.html"
+REPO = "https://github.com/snehankekre/bottomtime"
+RELEASES_API = "https://api.github.com/repos/snehankekre/bottomtime/releases/latest"
 
 # Shearwater Cloud's desktop app keeps its live database here on a Mac, one
 # folder per signed-in account ('loadinguser' is a placeholder before sign-in).
@@ -38,6 +46,14 @@ CLOUD_USERS = (
     / "Library/Containers/research.shearwater.cloud/Data/Library"
     / "Application Support/research.shearwater.cloud/users"
 )
+
+DEFAULT_SETTINGS = {
+    "units": "metric",          # 'metric' | 'imperial', display only
+    "check_on_open": True,      # read Cloud and Garmin when the app opens
+    "check_updates": True,      # ask GitHub whether a newer release is out
+    "hint_seen": False,         # the one-time "click a dive" hint
+    "garmin_account": None,     # the name Garmin shows for the signed-in account
+}
 
 
 def data_dir() -> Path:
@@ -54,6 +70,21 @@ def find_shearwater_cloud() -> Path | None:
     return max(dbs, key=lambda p: p.stat().st_mtime, default=None)
 
 
+def friendly(task: str, e: BaseException) -> str:
+    """What to tell a diver when something fails. The details go in the
+    problem report, not here."""
+    name, text = type(e).__name__, str(e)
+    if "Garmin" in name and ("Authentication" in name or "401" in text):
+        return "Garmin didn't accept the saved sign-in. Open Garmin Connect and sign in again."
+    if "Garmin" in name or "curl" in text.lower() or isinstance(e, (ConnectionError, TimeoutError)):
+        return f"{task} needs Garmin Connect, and bottomtime couldn't reach it. Check your internet connection and try again."
+    if isinstance(e, sqlite3.OperationalError):
+        return f"{task} couldn't read a database. If Shearwater Cloud is syncing, wait for it to finish and try again."
+    if isinstance(e, ValueError):
+        return text
+    return f"Something went wrong while {task[0].lower() + task[1:]}."
+
+
 class Api:
     """Everything the UI can ask for. Attributes are private so pywebview
     exposes only the methods."""
@@ -63,28 +94,56 @@ class Api:
         self._db = home / "dives.db"
         self._archive = home / "archive"
         self._garmin_tokens = home / "garmin"
+        self._settings_path = home / "settings.json"
         self._window = None
         self._mfa = None
         self._lock = threading.Lock()
-        self._job = {"busy": False, "message": "", "error": None}
-        store_db.connect(self._db).close()
+        self._job = {"busy": False, "message": "", "error": None, "detail": None}
+        try:
+            store_db.connect(self._db).close()
+            self._outdated = False
+        except store_db.OldStore:
+            self._outdated = True
+
+    # ---- settings ----
+
+    def settings(self) -> dict:
+        try:
+            saved = json.loads(self._settings_path.read_text())
+        except (OSError, ValueError):
+            saved = {}
+        return {**DEFAULT_SETTINGS, **{k: v for k, v in saved.items() if k in DEFAULT_SETTINGS}}
+
+    def set_setting(self, key: str, value) -> dict:
+        if key not in DEFAULT_SETTINGS:
+            return {"error": f"unknown setting {key}"}
+        settings = {**self.settings(), key: value}
+        self._settings_path.write_text(json.dumps(settings, indent=2))
+        return settings
 
     # ---- reading ----
 
     def overview(self) -> dict:
         cloud = find_shearwater_cloud()
-        con = sqlite3.connect(self._db)
-        computers = con.execute(
-            "SELECT count(DISTINCT device) FROM source_dives WHERE device NOT LIKE '%:None'"
-        ).fetchone()[0]
-        con.close()
+        if self._outdated:
+            dives, computers = [], 0
+        else:
+            dives = dive_summaries(self._db)
+            con = sqlite3.connect(self._db)
+            computers = con.execute(
+                "SELECT count(DISTINCT device) FROM source_dives WHERE device NOT LIKE '%:None'"
+            ).fetchone()[0]
+            con.close()
         return {
-            "dives": dive_summaries(self._db),
+            "dives": dives,
             "computers": computers,
             "shearwater_cloud": str(cloud) if cloud else None,
-            "garmin_signed_in": (self._garmin_tokens / "garmin_tokens.json").exists(),
+            "shearwater_account": cloud.parent.name if cloud else None,
+            "garmin_signed_in": self._signed_in(),
             "data_dir": str(self._home),
             "native": self._window is not None,
+            "version": __version__,
+            "settings": self.settings(),
         }
 
     def dive(self, dive_id: int) -> dict:
@@ -93,12 +152,44 @@ class Api:
     def progress(self) -> dict:
         return dict(self._job)
 
+    def startup(self) -> dict:
+        """Called once when the window opens: rebuild a store an older version
+        left behind, or look for new dives if the diver asked for that."""
+        if self._outdated:
+            return self._start("Updating your dives for this version of bottomtime", self._rebuild)
+        # Only once the diver has added dives themselves, so a first launch
+        # never reads another app's data before they asked for it.
+        con = sqlite3.connect(self._db)
+        has_dives = con.execute("SELECT 1 FROM source_dives LIMIT 1").fetchone() is not None
+        con.close()
+        if self.settings()["check_on_open"] and has_dives and (find_shearwater_cloud() or self._signed_in()):
+            return self._start("Looking for new dives", self._check_all)
+        return {"idle": True}
+
+    def check_for_update(self) -> dict:
+        if not self.settings()["check_updates"]:
+            return {}
+        try:
+            req = urllib.request.Request(RELEASES_API, headers={"Accept": "application/vnd.github+json"})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                latest = json.load(r)
+        except Exception:  # noqa: BLE001 - offline is not an error worth showing
+            return {}
+        tag = latest.get("tag_name", "").lstrip("v")
+
+        def parts(v: str) -> tuple:
+            return tuple(int(p) for p in v.split(".") if p.isdigit())
+
+        if tag and parts(tag) > parts(__version__):
+            return {"latest": tag, "url": latest.get("html_url", f"{REPO}/releases/latest")}
+        return {}
+
     # ---- importing ----
 
     def import_shearwater_cloud(self) -> dict:
         path = find_shearwater_cloud()
         if path is None:
-            return {"error": "Shearwater Cloud's database was not found on this Mac."}
+            return {"error": "Shearwater Cloud's desktop app wasn't found on this Mac."}
         return self._start("Reading Shearwater Cloud", lambda con: self._import_cloud(con, path))
 
     def choose_files(self) -> dict:
@@ -129,13 +220,12 @@ class Api:
         try:
             garmin = Garmin(email=email, password=password, return_on_mfa=True)
             status, state = garmin.login()
-        except Exception as e:  # noqa: BLE001 - shown to the diver as-is
-            return {"error": f"Garmin sign-in failed: {e}"}
+        except Exception as e:  # noqa: BLE001
+            return {"error": _sign_in_error(e)}
         if status == "needs_mfa":
             self._mfa = (garmin, state)
             return {"status": "mfa"}
-        garmin.client.dump(str(self._garmin_tokens))
-        return {"status": "ok"}
+        return self._signed_in_as(garmin)
 
     def garmin_mfa(self, code: str) -> dict:
         if not self._mfa:
@@ -144,20 +234,60 @@ class Api:
         try:
             garmin.resume_login(state, code.strip())
         except Exception as e:  # noqa: BLE001
-            return {"error": f"Garmin did not accept that code: {e}"}
+            return {"error": "Garmin didn't accept that code. " + _sign_in_error(e)}
         self._mfa = None
-        garmin.client.dump(str(self._garmin_tokens))
-        return {"status": "ok"}
+        return self._signed_in_as(garmin)
 
     def garmin_sign_out(self) -> dict:
-        for f in self._garmin_tokens.glob("*"):
-            f.unlink()
+        shutil.rmtree(self._garmin_tokens, ignore_errors=True)
+        self.set_setting("garmin_account", None)
         return {"status": "ok"}
 
     def garmin_sync(self) -> dict:
-        if not (self._garmin_tokens / "garmin_tokens.json").exists():
+        if not self._signed_in():
             return {"error": "Sign in to Garmin Connect first."}
         return self._start("Downloading from Garmin Connect", self._sync_garmin)
+
+    # ---- the data folder ----
+
+    def show_data_folder(self) -> dict:
+        subprocess.run(["open", str(self._home)], check=False)
+        return {}
+
+    def rebuild_store(self) -> dict:
+        return self._start("Rebuilding your dives from the saved files", self._rebuild)
+
+    def delete_everything(self) -> dict:
+        """Forget every dive, every saved original, the Garmin sign-in and the
+        settings. Shearwater Cloud and Garmin Connect are not touched."""
+        with self._lock:
+            if self._job["busy"]:
+                return {"error": "Wait for the current task to finish."}
+            for name in ("dives.db", "dives.db-wal", "dives.db-shm", "settings.json"):
+                (self._home / name).unlink(missing_ok=True)
+            shutil.rmtree(self._archive, ignore_errors=True)
+            shutil.rmtree(self._garmin_tokens, ignore_errors=True)
+            store_db.connect(self._db).close()
+            self._outdated = False
+        return {"status": "ok"}
+
+    # ---- links out ----
+
+    def open_link(self, which: str) -> dict:
+        urls = {"repo": REPO, "releases": f"{REPO}/releases/latest", "issues": f"{REPO}/issues"}
+        if which in urls:
+            _open(urls[which])
+        return {}
+
+    def report_problem(self, message: str = "", detail: str = "") -> dict:
+        body = (
+            f"**What happened**\n\n{message or '(describe what you were doing)'}\n\n"
+            f"**Details**\n\n```\n{detail[-3000:]}\n```\n\n"
+            f"bottomtime {__version__}, macOS {platform.mac_ver()[0] or platform.platform()}"
+        )
+        query = urllib.parse.urlencode({"title": message[:80] or "Problem in the app", "body": body})
+        _open(f"{REPO}/issues/new?{query}")
+        return {}
 
     # ---- exporting ----
 
@@ -187,32 +317,67 @@ class Api:
 
     # ---- jobs ----
 
+    def _signed_in(self) -> bool:
+        return (self._garmin_tokens / "garmin_tokens.json").exists()
+
+    def _signed_in_as(self, garmin) -> dict:
+        garmin.client.dump(str(self._garmin_tokens))
+        try:
+            name = garmin.get_full_name()
+        except Exception:  # noqa: BLE001 - the name is only for display
+            name = None
+        self.set_setting("garmin_account", name)
+        return {"status": "ok"}
+
     def _start(self, label: str, work) -> dict:
         with self._lock:
             if self._job["busy"]:
                 return {"error": "Still working on the last request."}
-            self._job = {"busy": True, "message": label, "error": None}
+            self._job = {"busy": True, "message": label, "error": None, "detail": None}
 
         def run():
-            con = store_db.connect(self._db)
             try:
-                work(con)
-                self._say("Matching dives across computers")
-                from .match.matcher import run_match
+                if work != self._rebuild:
+                    con = store_db.connect(self._db)
+                    try:
+                        work(con)
+                        self._say("Matching dives across computers")
+                        from .match.matcher import run_match
 
-                run_match(con, verbose=False)
-                self._job = {"busy": False, "message": "Done", "error": None}
+                        run_match(con, verbose=False)
+                    finally:
+                        con.close()
+                else:
+                    work()
+                self._job = {"busy": False, "message": "Done", "error": None, "detail": None}
             except Exception as e:  # noqa: BLE001
-                traceback.print_exc()
-                self._job = {"busy": False, "message": "", "error": str(e)}
-            finally:
-                con.close()
+                detail = traceback.format_exc()
+                print(detail, file=sys.stderr)
+                self._job = {"busy": False, "message": "", "error": friendly(label, e), "detail": detail}
 
         threading.Thread(target=run, daemon=True).start()
         return {"started": True}
 
     def _say(self, message: str) -> None:
         self._job = {**self._job, "message": message}
+
+    def _rebuild(self) -> None:
+        from .rebuild import rebuild
+
+        if rebuild(self._db, self._archive, say=lambda _: None):
+            raise ValueError(
+                "Some saved files couldn't be read, so your dives were left as they were."
+            )
+        self._outdated = False
+
+    def _check_all(self, con) -> None:
+        cloud = find_shearwater_cloud()
+        if cloud:
+            self._say("Reading Shearwater Cloud")
+            self._import_cloud(con, cloud)
+        if self._signed_in():
+            self._say("Checking Garmin Connect")
+            self._sync_garmin(con)
 
     def _import_cloud(self, con, path: Path) -> None:
         from .ingest.shearwater_db import ingest_shearwater_db
@@ -236,6 +401,8 @@ class Api:
             files += sorted(p.rglob("*")) if p.is_dir() else [p]
         fits = [p for p in files if p.suffix.lower() == ".fit"]
         dbs = [p for p in files if p.suffix.lower() == ".db"]
+        if not fits and not dbs:
+            raise ValueError("Choose .fit files from a Garmin, or a .db file exported from Shearwater Cloud.")
         failed = 0
         for i, p in enumerate(fits, 1):
             self._say(f"Adding FIT file {i} of {len(fits)}")
@@ -247,10 +414,14 @@ class Api:
         for p in dbs:
             self._say(f"Reading {p.name}")
             failed += ingest_shearwater_db(con, self._archive, p)["failed"]
-        if not fits and not dbs:
-            raise ValueError("Choose .fit files from a Garmin, or a Shearwater Cloud .db export.")
+        total = len(fits) + len(dbs)
+        if failed == total:
+            raise ValueError(
+                f"bottomtime couldn't read {'that file' if total == 1 else 'those files'}. It reads"
+                " .fit files from Garmin computers and .db files exported from Shearwater Cloud."
+            )
         if failed:
-            raise ValueError(f"{failed} file(s) could not be read.")
+            raise ValueError(f"{failed} of {total} files couldn't be read. The others were added.")
 
     def _sync_garmin(self, con) -> None:
         from garminconnect import Garmin
@@ -301,7 +472,22 @@ class Api:
     @staticmethod
     def _fail_if(stats: dict) -> None:
         if stats["failed"]:
-            raise ValueError(f"{stats['failed']} dive(s) could not be read.")
+            raise ValueError(f"{stats['failed']} dive(s) couldn't be read. The rest were added.")
+
+
+def _sign_in_error(e: Exception) -> str:
+    text = str(e)
+    if "401" in text or "credential" in text.lower() or "password" in text.lower():
+        return "Check the email and password, then try again."
+    if "429" in text or "Too Many" in text:
+        return "Garmin is limiting sign-ins right now. Wait a few minutes and try again."
+    return "Garmin Connect couldn't be reached, or refused the sign-in. Check your internet connection and try again."
+
+
+def _open(url: str) -> None:
+    import webbrowser
+
+    webbrowser.open(url)
 
 
 # Channels the charts and tooltip show, per source: name -> column.
@@ -329,6 +515,7 @@ def dive_chart(db: Path, dive_id: int) -> dict:
         logs.append(
             {
                 "source": source,
+                "name": log["name"],
                 "computer": log["computer"]["model"] or source,
                 "serial": log["computer"]["serial"],
                 "start_local": log["start_time_local"],
@@ -346,6 +533,8 @@ def dive_chart(db: Path, dive_id: int) -> dict:
     return {
         "id": dive["id"],
         "number": dive["dive_number"],
+        "name": next((lg["name"] for lg in logs if lg["source"] == "shearwater" and lg["name"]), None)
+        or next((lg["name"] for lg in logs if lg["name"]), None),
         "start_time_utc": dive["start_time_utc"],
         "utc_offset_min": dive["utc_offset_min"],
         "duration_s": dive["duration_s"],
@@ -363,15 +552,15 @@ def dive_filename(dive: dict) -> str:
 def export_zip(db: Path) -> bytes:
     """dives.csv with one row per dive, plus every dive's samples as its own
     CSV, so the data stays readable without bottomtime."""
+    import csv
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         summaries = dive_summaries(db)
         text = io.StringIO()
         fields = [k for k in summaries[0] if k != "id"] if summaries else []
-        text.write(",".join(["file"] + fields) + "\n")
-        import csv
-
         writer = csv.writer(text)
+        writer.writerow(["file"] + fields)
         for s in summaries:
             name = f"dives/{s['start_time_utc'][:10]}-{s['number'] or 'test'}-{s['id']}.csv"
             writer.writerow([name] + [

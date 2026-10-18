@@ -193,41 +193,6 @@ def _cmd_export(db_path: str, dive_number: int, fmt: str, out: Path | None) -> i
     return 0
 
 
-def _cmd_rebuild(db_path: Path, archive_dir: Path) -> int:
-    from .ingest.garmin_fit import ingest_garmin_dir
-    from .ingest.shearwater_db import ingest_shearwater_db
-    from .match.matcher import run_match
-
-    def oldest_first(kind: str) -> list[Path]:
-        return sorted((archive_dir / kind).glob("*"), key=lambda p: p.stat().st_mtime)
-
-    tmp = db_path.with_name(db_path.name + ".rebuild")
-    tmp.unlink(missing_ok=True)
-    con = store_db.connect(tmp)
-    indexes = oldest_first("garmin_index")
-    stats = ingest_garmin_dir(
-        con, archive_dir, archive_dir / "fit", indexes[-1] if indexes else None
-    )
-    print(f"garmin: {stats}")
-    failed = stats["failed"]
-    # Each Cloud export holds every dive so far, so older exports go first and
-    # later ones only add the dives that are new.
-    for path in oldest_first("shearwater_db"):
-        stats = ingest_shearwater_db(con, archive_dir, path)
-        print(f"shearwater {path.name[:12]}: {stats}")
-        failed += stats["failed"]
-    print(f"match: {run_match(con)}")
-    con.close()
-    if failed:
-        print(f"{failed} file(s) failed; {db_path} is unchanged, the new store is {tmp}")
-        return 1
-    for suffix in ("-wal", "-shm"):
-        Path(f"{db_path}{suffix}").unlink(missing_ok=True)
-    tmp.replace(db_path)
-    print(f"rebuilt {db_path}")
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="bottomtime")
     parser.add_argument("--db", default="data/dives.db", help="path to the dive store")
@@ -289,7 +254,9 @@ def main(argv: list[str] | None = None) -> int:
             args.data_dir.mkdir(parents=True, exist_ok=True)
         return run(browser=args.browser, home=args.data_dir)
     if args.command == "rebuild":
-        return _cmd_rebuild(Path(args.db), archive_dir)
+        from .rebuild import rebuild
+
+        return 1 if rebuild(Path(args.db), archive_dir) else 0
     con = store_db.connect(args.db)
 
     if args.command == "init":

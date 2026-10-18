@@ -72,6 +72,11 @@ deco ceiling, GF99, and ppO2, with a readout of each computer at the same
 moment. **Export all** saves every dive as CSV in a zip file, so your data
 stays readable without bottomtime or the manufacturers' apps.
 
+Help, in the app, explains every column and term. Settings switches between
+metric and imperial, can look for new dives each time the app opens, and
+shows where your data lives. After an update the app rebuilds your dive list
+from the files it saved, by itself.
+
 Everything stays on your Mac, in `~/Library/Application Support/bottomtime`.
 The Garmin download uses Garmin Connect's unofficial API, through
 [garminconnect](https://github.com/cyberjunky/python-garminconnect), so it can

@@ -92,6 +92,7 @@ def load_dive(
                 "source_dive_id": sd["id"],
                 "source_key": sd["source_key"],
                 "device": sd["device"],
+                "name": sd["name"],
                 # Seconds from the dive's start to this log's t_s = 0.
                 "offset_s": sd["offset_s"],
                 "start_time_utc": sd["start_time_utc"],
@@ -193,7 +194,7 @@ def dive_summaries(db_path: str | Path) -> list[dict]:
 
         members: dict[int, list] = defaultdict(list)
         for r in con.execute(
-            "SELECT dm.dive_id, sd.id, sd.source, sd.model, sd.mode"
+            "SELECT dm.dive_id, sd.id, sd.source, sd.model, sd.mode, sd.name"
             " FROM dive_members dm JOIN source_dives sd ON sd.id = dm.source_dive_id"
             " ORDER BY dm.offset_s"
         ):
@@ -217,6 +218,9 @@ def dive_summaries(db_path: str | Path) -> list[dict]:
                     "max_depth_m": d["max_depth_m"],
                     "is_test": bool(d["is_test"]),
                     "computers": [m["model"] or m["source"] for m in logs],
+                    # A Shearwater site name is one the diver typed, so it wins.
+                    "name": next((m["name"] for m in logs if m["source"] == "shearwater" and m["name"]), None)
+                    or next((m["name"] for m in logs if m["name"]), None),
                     "mode": next((m["mode"] for m in logs if m["source"] == "shearwater"), None)
                     or next((m["mode"] for m in logs), None),
                     "gf99_max": best(logs, "gf99_max"),

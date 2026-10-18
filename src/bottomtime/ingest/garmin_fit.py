@@ -49,6 +49,12 @@ RECORD_COLUMNS = {
     "rmv": "rmv",
 }
 
+# Names Garmin gives every dive of a kind, which say nothing about this one.
+GENERIC_NAMES = {
+    "diving", "single-gas dive", "multi-gas dive", "ccr dive", "gauge dive",
+    "apnea dive", "apnea hunt", "single gas dive", "multi gas dive",
+}
+
 # message types routed to dedicated tables rather than header_json
 NON_HEADER_KEYS = {"record_mesgs", "event_mesgs", "dive_alarm_mesgs", "dive_gas_mesgs"}
 
@@ -162,6 +168,10 @@ def ingest_fit_file(
         (s.get("avg_depth") for s in summaries if s.get("avg_depth") is not None), None
     )
     mode = entry.get("activityType", {}).get("typeKey") if entry else None
+    name = (entry or {}).get("activityName", "").strip()
+    if name.lower() in GENERIC_NAMES:
+        name = ""
+    name = name or (entry or {}).get("locationName") or None
 
     intervals = [
         records[i + 1]["timestamp"] - records[i]["timestamp"]
@@ -170,16 +180,17 @@ def ingest_fit_file(
     interval_ms = int(sorted(intervals)[len(intervals) // 2] * 1000) if intervals else None
 
     cur = con.execute(
-        "INSERT INTO source_dives (source, artifact_id, source_key, device, model,"
+        "INSERT INTO source_dives (source, artifact_id, source_key, device, model, name,"
         " content_hash, decoder_version, start_time_utc, start_time_local,"
         " utc_offset_min, duration_s, max_depth_m, avg_depth_m, sample_interval_ms,"
         " mode, header_json)"
-        " VALUES ('garmin',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " VALUES ('garmin',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             artifact_id,
             activity_id,
             f"garmin:{file_id.get('serial_number')}",
             computer_info("garmin", header)["model"],
+            name,
             digest,
             DECODER_VERSION,
             start_utc,
