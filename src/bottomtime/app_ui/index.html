@@ -360,6 +360,9 @@
 
 <script>
 "use strict";
+// Everything stays inside this function, because pywebview declares globals
+// of its own (a `var value` replaced the chart code's value()).
+(() => {
 const $ = (id) => document.getElementById(id);
 const SERIES = ["--series-1", "--series-2", "--series-3"];
 const color = (i) => getComputedStyle(document.documentElement).getPropertyValue(SERIES[i % SERIES.length]).trim();
@@ -959,6 +962,7 @@ async function start() {
 if (token) start();
 else if (window.pywebview && window.pywebview.api) start();
 else addEventListener("pywebviewready", start);
+})();
 </script>
 </body>
 </html>
