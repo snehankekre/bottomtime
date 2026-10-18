@@ -102,7 +102,9 @@
   th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
   th { font-size: 12px; font-weight: 600; color: var(--text-secondary); cursor: pointer; user-select: none; }
   th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
-  td.name { max-width: 260px; overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary); }
+  td.name, td.wrap { white-space: normal; min-width: 140px; }
+  td.name { min-width: 240px; color: var(--text-secondary); }
+  .table-wrap { overflow-x: auto; border-radius: 10px; }
   th[aria-sort=ascending]::after { content: " ▲"; font-size: 9px; }
   th[aria-sort=descending]::after { content: " ▼"; font-size: 9px; }
   tbody tr { cursor: pointer; }
@@ -164,6 +166,16 @@
   .help dt { font-weight: 600; }
   .help dd { margin: 0; color: var(--text-secondary); }
   .help-body { overflow-y: auto; max-height: calc(86vh - 110px); padding-right: 6px; }
+  .help-top { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
+
+  .coach-ring { position: fixed; z-index: 30; pointer-events: none; border-radius: 8px;
+    box-shadow: 0 0 0 3px var(--accent), 0 0 0 9999px rgba(0,0,0,.35); }
+  .coach { position: fixed; z-index: 40; width: 320px; background: var(--surface-1); border: 1px solid var(--hairline);
+    border-radius: 10px; padding: 14px 16px; box-shadow: 0 8px 28px rgba(0,0,0,.2); font-size: 13px; }
+  .coach h2 { font-size: 14px; margin: 0 0 4px; }
+  .coach p { margin: 0 0 12px; color: var(--text-secondary); }
+  .coach .row { display: flex; gap: 8px; align-items: center; }
+  .coach .of { flex: 1; font-size: 12px; color: var(--text-muted); }
 </style>
 </head>
 <body>
@@ -172,16 +184,15 @@
   <div class="actions">
     <button id="btn-cloud">Read Shearwater Cloud</button>
     <button id="btn-garmin">Garmin Connect</button>
-    <button id="btn-files">Add files…</button>
-    <button id="btn-export-all">Export all…</button>
+    <button id="btn-files" title="Add .fit files from a Garmin or a .db file exported from Shearwater Cloud">Add files…</button>
+    <button id="btn-export-all" title="Save every dive as CSV files that open in Excel or Numbers">Export all…</button>
     <span class="sep"></span>
-    <button class="quiet" id="btn-help">Help</button>
-    <button class="quiet" id="btn-settings">Settings</button>
+    <button class="quiet" id="btn-help" title="What every column and term means, and a tour of the app">Help</button>
+    <button class="quiet" id="btn-settings" title="Units, accounts, and where your data is kept">Settings</button>
   </div>
 </header>
 <div class="banner" id="update" hidden><span class="grow" id="update-text"></span><button class="link" id="update-get">Download it</button><button class="link" id="update-hide">Not now</button></div>
 <div class="banner" id="status" hidden></div>
-<div class="banner" id="hint" hidden><span class="grow">Click any dive to see every computer's log on one timeline. <button class="link" id="hint-help">Help</button> explains each column.</span><button class="link" id="hint-ok">Got it</button></div>
 <input type="file" id="file-input" multiple accept=".fit,.db" hidden>
 
 <main>
@@ -208,20 +219,20 @@
 
   <section id="list" hidden>
     <div class="filters">
-      <input type="search" id="f-search" placeholder="Search names and computers" aria-label="Search names and computers">
-      <label>From <input type="date" id="f-from"></label>
-      <label>To <input type="date" id="f-to"></label>
-      <label><input type="checkbox" id="f-tests"> Include pool and test dives</label>
-      <label>Chart <select id="f-metric"></select></label>
+      <input type="search" id="f-search" placeholder="Search names and computers" aria-label="Search names and computers" title="Type part of a site name, a computer model, or a dive number">
+      <label title="Show dives on or after this day">From <input type="date" id="f-from"></label>
+      <label title="Show dives on or before this day">To <input type="date" id="f-to"></label>
+      <label title="Dives shorter than 2 minutes or shallower than 2 m"><input type="checkbox" id="f-tests"> Include pool and test dives</label>
+      <label title="Which value the chart above the list plots for each dive">Chart <select id="f-metric"></select></label>
     </div>
     <figure class="card">
       <p class="chart-title" id="across-title"></p>
       <svg id="across" width="100%" height="220" role="img"></svg>
     </figure>
-    <table>
+    <div class="table-wrap"><table>
       <thead><tr id="thead"></tr></thead>
       <tbody id="tbody"></tbody>
-    </table>
+    </table></div>
   </section>
 
   <section id="detail" hidden>
@@ -230,7 +241,7 @@
       <h1 id="d-title"></h1>
       <span class="facts" id="d-facts"></span>
       <span class="spacer"></span>
-      <button id="d-export">Export this dive (CSV)</button>
+      <button id="d-export" title="Every sample from every computer on this dive, in one CSV file">Export this dive (CSV)</button>
     </div>
     <div class="logs" id="d-logs"></div>
     <div class="card">
@@ -242,6 +253,8 @@
 </main>
 
 <div class="tip" id="tip" hidden></div>
+<div class="coach-ring" id="coach-ring" hidden></div>
+<div class="coach" id="coach" role="dialog" aria-labelledby="coach-title" hidden><h2 id="coach-title"></h2><p id="coach-text"></p><div class="row"><span class="of" id="coach-of"></span><button class="quiet" id="coach-skip">Skip</button><button id="coach-back">Back</button><button class="primary" id="coach-next">Next</button></div></div>
 
 <dialog id="garmin">
   <div id="g-signin">
@@ -311,6 +324,7 @@
 
 <dialog id="help" class="wide help">
   <h2 tabindex="-1" autofocus>How bottomtime works</h2>
+  <div class="help-top"><button id="help-tour">Show me around</button><button id="help-manual">Open the full manual</button></div>
   <div class="help-body">
     <h3>Getting your dives in</h3>
     <p><b>Shearwater.</b> bottomtime reads Shearwater Cloud's own database on this Mac, so there is nothing to export. Open Shearwater Cloud first and make sure it shows your latest dives, then click Read Shearwater Cloud. If Shearwater Cloud isn't on this Mac, export a database from it on another computer (File → Export → Export Database) and add the .db file.</p>
@@ -480,7 +494,7 @@ const COLUMNS = [
   {key: "cns_pct", label: "CNS", num: true, get: (d) => d.cns_pct, show: (d) => d.cns_pct == null ? "" : num(d.cns_pct) + "%",
    help: "The highest oxygen exposure any computer showed, as a percentage of the limit."},
   {key: "mode", label: "Mode", get: (d) => d.mode, show: (d) => fmtMode(d.mode)},
-  {key: "computers", label: "Computers", get: (d) => d.computers.join(" + "), show: (d) => d.computers.join(" + ")},
+  {key: "computers", label: "Computers", get: (d) => d.computers.join(" + "), show: (d) => d.computers.join(" + "), cls: "wrap"},
 ];
 const METRICS = {
   max_depth_m: {label: () => `Max depth (${depthUnit()})`, get: (d) => toDepth(d.max_depth_m), down: true, dp: () => (imperial() ? 0 : 1)},
@@ -545,7 +559,7 @@ function renderList() {
       const td = document.createElement("td");
       td.textContent = c.show(d);
       if (c.num) td.className = "num";
-      if (c.cls) { td.className = c.cls; td.title = c.show(d); }
+      if (c.cls) td.className = c.cls;
       if (c.key === "number" && d.is_test) { const t = document.createElement("span"); t.className = "tag"; t.textContent = "pool/test"; td.append(t); }
       tr.append(td);
     }
@@ -654,11 +668,12 @@ const hideTip = () => { $("tip").hidden = true; };
 let current = null;
 async function openDive(id) {
   hideTip();
+  if (touring) endTour();
   current = await call("dive", id);
   $("list").hidden = true; $("empty").hidden = true; $("detail").hidden = false;
-  if (!settings().hint_seen) dismissHint();
   window.scrollTo(0, 0);
   renderDive();
+  if (!settings().tour_dive) tour("dive");
 }
 function renderDive() {
   const d = current, t = localDate(d);
@@ -804,7 +819,71 @@ function renderPanels() {
   box.onblur = () => hideTip();
 }
 
-function backToList() { $("detail").hidden = true; current = null; hideTip(); refresh(); }
+function backToList() { if (touring) endTour(); $("detail").hidden = true; current = null; hideTip(); refresh(); }
+
+// ---- first-run tour ----
+// Each step points at one part of the page. Steps whose part isn't on
+// screen, or that don't apply to this dive, are left out.
+const TOURS = {
+  list: [
+    ["#btn-cloud", "Bring in new dives", "After a dive trip, sync your computers with Shearwater Cloud and Garmin Connect, then click Read Shearwater Cloud or Download Garmin dives again. bottomtime only adds the dives it doesn't have yet."],
+    ["#list figure", "Every dive on one chart", "Each dot is one dive, by date. Choose what it plots with Chart, above it, and click a dot to open that dive."],
+    ["#list thead", "The columns", "Hold the pointer over a column name to see what it means. Click a column name to sort by it, and click again to reverse."],
+    ["#tbody tr", "Open a dive", "Click any row to see every computer's log of that dive on one timeline."],
+    ["#list .filters", "Find dives", "Search by site name, computer, or dive number, or pick dates. The chart follows whatever the list shows."],
+    ["#btn-export-all", "Keep your data", "Export all saves every dive as CSV files that open in Excel or Numbers, so you can read them without bottomtime or the manufacturers' apps."],
+    ["#btn-help", "Help and Settings", "Help explains every column and term, and can show you this tour again. Settings switches between metres and feet, and shows your accounts and where your data is kept."],
+  ],
+  dive: [
+    ["#d-logs", "The computers", "One card for each computer that logged this dive: its serial number, when it started by its own clock, and the gases it had."],
+    ["#panels", "Read the dive", "Move the pointer over the charts to read every computer at the same moment. You can also click the charts and use the left and right arrow keys. Solid lines are depth, and the dashed line is the deco ceiling the Shearwater calculated."],
+    ["#d-note", "Lining up the clocks", "No two computers' clocks agree, so bottomtime slides one depth profile against the other until they match. This line says how many seconds were left over.", () => current.matches.length],
+    ["#d-export", "Export this dive", "Saves every sample from every computer on this dive in one CSV file."],
+    ["#back", "Back to the list", "Esc does the same."],
+  ],
+};
+let touring = null;
+function tour(name) {
+  if (touring) return;
+  const steps = TOURS[name].filter(([sel, , , when]) => {
+    const t = document.querySelector(sel);
+    return t && t.getClientRects().length && (!when || when());
+  });
+  if (!steps.length) return;
+  touring = {name, steps, i: 0};
+  showStep();
+}
+function placeCoach() {
+  const target = document.querySelector(touring.steps[touring.i][0]), ring = $("coach-ring"), coach = $("coach");
+  const r = target.getBoundingClientRect(), c = coach.getBoundingClientRect();
+  Object.assign(ring.style, {left: r.left - 4 + "px", top: r.top - 4 + "px", width: r.width + 8 + "px", height: r.height + 8 + "px"});
+  const below = r.bottom + 14 + c.height < innerHeight;
+  coach.style.top = (below ? r.bottom + 14 : Math.max(8, r.top - c.height - 14)) + "px";
+  coach.style.left = Math.min(Math.max(8, r.left), innerWidth - c.width - 8) + "px";
+}
+function showStep() {
+  const {steps, i} = touring, [sel, title, text] = steps[i];
+  hideTip();
+  document.querySelector(sel).scrollIntoView({block: "nearest"});
+  $("coach-title").textContent = title;
+  $("coach-text").textContent = text;
+  $("coach-of").textContent = `${i + 1} of ${steps.length}`;
+  $("coach-back").hidden = i === 0;
+  $("coach-next").textContent = i === steps.length - 1 ? "Done" : "Next";
+  $("coach").hidden = $("coach-ring").hidden = false;
+  placeCoach();
+  $("coach-next").focus();
+}
+async function endTour() {
+  $("coach").hidden = $("coach-ring").hidden = true;
+  const name = touring.name;
+  touring = null;
+  overview.settings = await call("set_setting", "tour_" + name, true);
+}
+$("coach-next").onclick = () => { if (touring.i === touring.steps.length - 1) return endTour(); touring.i++; showStep(); };
+$("coach-back").onclick = () => { touring.i--; showStep(); };
+$("coach-skip").onclick = endTour;
+addEventListener("scroll", () => touring && placeCoach(), {passive: true});
 
 // ---- page ----
 async function refresh() {
@@ -822,15 +901,16 @@ async function refresh() {
     ? "Shearwater Cloud is installed on this Mac, so bottomtime can read its dives directly. Make sure it shows your latest dives first."
     : "Shearwater Cloud's desktop app isn't on this Mac. Install it from Shearwater's website and sync your computer, or use step 3 with an exported .db file.";
   $("btn-garmin").textContent = overview.garmin_signed_in ? "Download Garmin dives" : "Garmin Connect";
+  $("btn-garmin").title = overview.garmin_signed_in
+    ? "Download the dives your Garmin has synced to Garmin Connect since last time" : "Sign in to Garmin Connect to download your Garmin dives";
   const has = overview.dives.length > 0;
   $("empty").hidden = has || !$("detail").hidden;
   if ($("detail").hidden) $("list").hidden = !has;
   $("btn-export-all").disabled = !has;
-  $("hint").hidden = !has || settings().hint_seen || !$("detail").hidden;
   if (has && $("detail").hidden) renderList();
   if (current) renderDive();
+  if (has && $("detail").hidden && !settings().tour_list) tour("list");
 }
-async function dismissHint() { $("hint").hidden = true; overview.settings = await call("set_setting", "hint_seen", true); }
 
 function chooseFiles() {
   if (native()) return startJob(call("choose_files"));
@@ -928,9 +1008,10 @@ $("help-close").onclick = () => $("help").close();
 $("btn-cloud").onclick = $("empty-btn-cloud").onclick = () => startJob(call("import_shearwater_cloud"));
 $("btn-garmin").onclick = $("empty-btn-garmin").onclick = openGarmin;
 $("btn-files").onclick = $("empty-btn-files").onclick = chooseFiles;
-$("btn-help").onclick = $("empty-help").onclick = $("hint-help").onclick = openHelp;
+$("btn-help").onclick = $("empty-help").onclick = openHelp;
 $("btn-settings").onclick = openSettings;
-$("hint-ok").onclick = dismissHint;
+$("help-tour").onclick = () => { $("help").close(); tour(current ? "dive" : "list"); };
+$("help-manual").onclick = () => call("open_link", "manual");
 $("btn-export-all").onclick = async () => {
   if (!native()) return download("/export/all.zip");
   showStatus("Writing every dive", "busy");
@@ -944,6 +1025,7 @@ $("d-export").onclick = async () => {
 };
 $("back").onclick = backToList;
 addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && touring) return endTour();
   if (e.key === "Escape" && current && !document.querySelector("dialog[open]")) backToList();
 });
 $("update-get").onclick = () => call("open_link", "releases");
@@ -951,7 +1033,10 @@ $("update-hide").onclick = () => { $("update").hidden = true; };
 $("f-search").oninput = renderList;
 for (const id of ["f-from", "f-to", "f-tests", "f-metric"]) $(id).onchange = renderList;
 let resizeTimer;
-addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => (current ? renderPanels() : overview && overview.dives.length && renderList()), 150); });
+addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { current ? renderPanels() : overview && overview.dives.length && renderList(); if (touring) placeCoach(); }, 150);
+});
 
 async function start() {
   await refresh();

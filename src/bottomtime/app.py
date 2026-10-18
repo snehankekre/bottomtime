@@ -51,7 +51,8 @@ DEFAULT_SETTINGS = {
     "units": "metric",          # 'metric' | 'imperial', display only
     "check_on_open": True,      # read Cloud and Garmin when the app opens
     "check_updates": True,      # ask GitHub whether a newer release is out
-    "hint_seen": False,         # the one-time "click a dive" hint
+    "tour_list": False,         # the first-run tour of the dive list was shown
+    "tour_dive": False,         # the first-run tour of a dive was shown
     "garmin_account": None,     # the name Garmin shows for the signed-in account
 }
 
@@ -75,7 +76,7 @@ def friendly(task: str, e: BaseException) -> str:
     problem report, not here."""
     name, text = type(e).__name__, str(e)
     if "Garmin" in name and ("Authentication" in name or "401" in text):
-        return "Garmin didn't accept the saved sign-in. Open Garmin Connect and sign in again."
+        return "Garmin didn't accept the saved sign-in. Click Garmin Connect and sign in again."
     if "Garmin" in name or "curl" in text.lower() or isinstance(e, (ConnectionError, TimeoutError)):
         return f"{task} needs Garmin Connect, and bottomtime couldn't reach it. Check your internet connection and try again."
     if isinstance(e, sqlite3.OperationalError):
@@ -274,7 +275,8 @@ class Api:
     # ---- links out ----
 
     def open_link(self, which: str) -> dict:
-        urls = {"repo": REPO, "releases": f"{REPO}/releases/latest", "issues": f"{REPO}/issues"}
+        urls = {"repo": REPO, "releases": f"{REPO}/releases/latest", "issues": f"{REPO}/issues",
+                "manual": f"{REPO}/blob/main/docs/manual.md"}
         if which in urls:
             _open(urls[which])
         return {}
@@ -430,7 +432,14 @@ class Api:
         from .ingest.garmin_fit import ingest_fit_file
 
         garmin = Garmin()
-        garmin.login(str(self._garmin_tokens))
+        try:
+            garmin.login(str(self._garmin_tokens))
+        except Exception as e:
+            # A rejected token is useless; dropping it turns the button
+            # back into "Garmin Connect" so the diver can sign in again.
+            if "Authentication" in type(e).__name__ or "401" in str(e):
+                self.garmin_sign_out()
+            raise
         self._say("Listing your Garmin dives")
         dives = garmin.get_activities_by_date(
             "2000-01-01", date.today().isoformat(), activitytype="diving"

@@ -48,3 +48,20 @@ def test_delete_everything_leaves_an_empty_store(tmp_path):
     assert not (tmp_path / "archive").exists()
     assert api.settings()["units"] == "metric"
     assert api.overview()["dives"] == []
+
+
+def test_a_rejected_garmin_sign_in_signs_out(tmp_path, monkeypatch):
+    import garminconnect
+
+    class Rejected(garminconnect.Garmin):
+        def login(self, *args, **kwargs):
+            raise garminconnect.GarminConnectAuthenticationError("401 Unauthorized")
+
+    monkeypatch.setattr(garminconnect, "Garmin", Rejected)
+    api = app.Api(tmp_path)
+    (tmp_path / "garmin").mkdir()
+    (tmp_path / "garmin" / "garmin_tokens.json").write_text("{}")
+    assert api.overview()["garmin_signed_in"]
+    api.garmin_sync()
+    assert "sign in again" in _wait(api)["error"]
+    assert not api.overview()["garmin_signed_in"]
