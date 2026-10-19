@@ -31,5 +31,8 @@ plutil -replace CFBundleShortVersionString -string "$version" "$plist"
 plutil -replace CFBundleVersion -string "$version" "$plist"
 # Editing the plist breaks the ad-hoc signature PyInstaller made, so sign again.
 codesign --force --deep --sign - "$out/bottomtime.app"
-ditto -c -k --keepParent "$out/bottomtime.app" "$zip"
+# Leave macOS's file labels out of the zip. Finder's Archive Utility writes the
+# ones it can't attach (on the Frameworks symlinks) as stray ._ files inside
+# the app, which breaks its seal, and macOS then calls the app damaged.
+ditto -c -k --norsrc --noextattr --keepParent "$out/bottomtime.app" "$zip"
 echo "built bottomtime $version: $out/bottomtime.app and $zip"
