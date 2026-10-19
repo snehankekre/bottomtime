@@ -62,7 +62,7 @@ you have an Intel Mac.
 
 ### On Windows
 
-1. Download [`bottomtime-windows.zip`](https://github.com/snehankekre/bottomtime/releases/download/v0.8.0b3/bottomtime-windows.zip).
+1. Download [`bottomtime-windows.zip`](https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-windows.zip).
 2. Right-click the zip file, choose Extract All, and extract it somewhere you
    keep your own files, such as Documents. You get a folder called
    `bottomtime`.
