@@ -38,6 +38,7 @@ jobs:
         shell: pwsh
         env:
           BOTTOMTIME_TEST_VERSION: 0.8.0b1
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           New-Item -ItemType Directory updtest | Out-Null
           Copy-Item -Recurse dist/bottomtime updtest/bottomtime

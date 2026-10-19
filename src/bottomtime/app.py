@@ -216,7 +216,11 @@ class Api:
         if not self.settings()["check_updates"]:
             return {}
         try:
-            req = urllib.request.Request(RELEASES_API, headers={"Accept": "application/vnd.github+json"})
+            headers = {"Accept": "application/vnd.github+json"}
+            # CI machines share addresses, so without a token GitHub limits them.
+            if os.environ.get("GITHUB_TOKEN"):
+                headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
+            req = urllib.request.Request(RELEASES_API, headers=headers)
             with urllib.request.urlopen(req, timeout=5) as r:
                 releases = json.load(r)
         except Exception:  # noqa: BLE001 - offline is not an error worth showing
