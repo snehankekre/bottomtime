@@ -1,10 +1,11 @@
 # bottomtime
 
 A lossless dive-log store for divers who log with more than one computer,
-with a Mac app for divers who don't use a terminal.
+with an app for Mac and Windows for divers who don't use a terminal.
 
 **[Website](https://snehankekre.com/bottomtime/)** ·
-**[Download the Mac app](https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac.zip)** ·
+**[Download for Mac](https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac.zip)** ·
+**[Download for Windows](https://github.com/snehankekre/bottomtime/releases/download/v0.8.0b1/bottomtime-windows.zip)** ·
 **[Manual](https://snehankekre.com/bottomtime/manual.html)** ·
 **[Command line and Python](https://snehankekre.com/bottomtime/cli.html)**
 
@@ -56,18 +57,22 @@ bottomtime keeps everything:
 Everything lands in a single SQLite file with a stable schema, ready for SQL,
 pandas, or whatever you analyze with.
 
-## The Mac app
+## The app
 
-If you'd rather not use a terminal, bottomtime is also a Mac app. It runs on
-macOS 11 or newer and has everything it needs inside it.
+If you'd rather not use a terminal, bottomtime is also an app for Mac and
+Windows. It runs on macOS 11 or newer and on 64-bit Windows 10 or 11, and has
+everything it needs inside it.
 
 1. Download [`bottomtime-mac.zip`](https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac.zip)
-   for an Apple silicon Mac, or [`bottomtime-mac-intel.zip`](https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac-intel.zip)
-   for an Intel Mac. Unzip it and drag `bottomtime` into Applications.
+   for an Apple silicon Mac, [`bottomtime-mac-intel.zip`](https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac-intel.zip)
+   for an Intel Mac, or [`bottomtime-windows.zip`](https://github.com/snehankekre/bottomtime/releases/download/v0.8.0b1/bottomtime-windows.zip)
+   for Windows. On a Mac, unzip it and drag `bottomtime` into Applications. On
+   Windows, extract it and open `bottomtime.exe` in the `bottomtime` folder.
 2. Open it. macOS will say it can't verify the app, because the app isn't
    notarized by Apple. Open System Settings, go to Privacy & Security, scroll
-   down to the message about bottomtime, and click Open Anyway. You only do
-   this once.
+   down to the message about bottomtime, and click Open Anyway. Windows will
+   say it protected your PC, because the app isn't signed. Click More info,
+   then Run anyway. Either way, you only do this once.
 3. Click **Read Shearwater Cloud** if you use Shearwater's desktop app (sync
    it with your computer first), and **Garmin Connect** to sign in and
    download your Garmin dives. Your Garmin password goes only to Garmin. You
@@ -95,7 +100,8 @@ After an update the app rebuilds your dive list from the files it saved, by
 itself. [The manual](https://snehankekre.com/bottomtime/manual.html) covers
 all of it, including what to do when something goes wrong.
 
-Everything stays on your Mac, in `~/Library/Application Support/bottomtime`.
+Everything stays on your computer, in `~/Library/Application Support/bottomtime`
+on a Mac and `%APPDATA%\bottomtime` on Windows.
 The Garmin download uses Garmin Connect's unofficial API, through
 [garminconnect](https://github.com/cyberjunky/python-garminconnect), so it can
 break when Garmin changes something. Adding `.fit` files by hand still works

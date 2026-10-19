@@ -5,7 +5,7 @@ description: Install bottomtime from PyPI, build a dive store from the command l
 
 # Command line and Python
 
-The Mac app and the command line use the same package and the same store
+The app and the command line use the same package and the same store
 format. The command line works anywhere Python 3.10 or newer runs, including
 Linux and Windows.
 
@@ -62,7 +62,7 @@ bottomtime rebuild
 
 `rebuild` builds a fresh store from every file in the archive and replaces the
 old store only if nothing failed. bottomtime refuses to open a store built by
-an older version, and says to run `rebuild`. The Mac app does this by itself.
+an older version, and says to run `rebuild`. The app does this by itself.
 
 ## Looking at your dives
 
@@ -86,8 +86,10 @@ bottomtime app --data-dir ~/some/folder
 ```
 
 The app keeps its own store in `~/Library/Application Support/bottomtime` on
-a Mac, separate from the `data/dives.db` the command line uses by default.
-`packaging/build_mac_app.sh` in the repository builds the `.app`.
+a Mac and in `%APPDATA%\bottomtime` on Windows, separate from the
+`data/dives.db` the command line uses by default.
+`packaging/build_mac_app.sh` in the repository builds the Mac app, and the
+`windows app` workflow in `.github/workflows` builds the Windows one.
 
 ## Python
 

@@ -16,7 +16,7 @@ a small Python package I wrote and documented byte by byte in
 XML and CSV exports are made from the same logs, but they leave out GF99, the
 deco ceiling, @+5, and battery voltage. Reading the native format keeps them.
 
-The Mac app reads Shearwater Cloud's live database through SQLite's backup
+The app reads Shearwater Cloud's live database through SQLite's backup
 function, which takes a consistent copy even while Shearwater Cloud is
 running, then archives that copy. Shearwater Cloud re-compresses a dive's log
 each time it exports or syncs, so bottomtime recognises a dive it already has
@@ -25,7 +25,7 @@ by a hash of the decompressed log.
 **Garmin.** Descent computers record dives as FIT files. bottomtime reads them
 with Garmin's official FIT SDK. Known dive values become columns, and every
 other field, including Garmin's undocumented message types, is stored raw. The
-Mac app downloads the original FIT files from Garmin Connect with
+app downloads the original FIT files from Garmin Connect with
 [garminconnect](https://github.com/cyberjunky/python-garminconnect), which
 signs in the way Garmin's own apps do. Garmin's official API needs approval
 through Garmin's developer program, so this route can break when Garmin
@@ -142,3 +142,10 @@ field differently. bottomtime keeps every byte it doesn't understand, and
 `verify` would flag a value that disagrees with Shearwater's own export. If
 yours do, please [report it](https://github.com/snehankekre/bottomtime/issues)
 with the dive attached.
+
+On Windows, CI builds the app on GitHub's Windows Server 2025 machines and
+opens its window to check that the page loads and talks to the app. A
+separate check installs Shearwater Cloud's Windows app, signs in, lets it
+sync, and reads every dive from the folder it keeps them in, which on my
+account was 144 dives. The Garmin download worked there too, and fetched all 341 of my dives.
+The tests run on Windows, macOS, and Linux on every change.

@@ -12,7 +12,8 @@ database can be thrown away and rebuilt from them at any time, which is what
 
 ## Where it lives
 
-The Mac app keeps everything in `~/Library/Application Support/bottomtime`:
+The app keeps everything in `~/Library/Application Support/bottomtime` on a
+Mac, and in `%APPDATA%\bottomtime` on Windows:
 
 | Path | What it is |
 |---|---|

@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>bottomtime · every dive computer you wore, on one timeline</title>
-<meta name="description" content="A free Mac app for divers who wear a Shearwater and a Garmin Descent. It lines up both computers' logs of each dive and keeps every value they recorded, including GF99 and the deco ceiling.">
+<meta name="description" content="A free app for Mac and Windows, for divers who wear a Shearwater and a Garmin Descent. It lines up both computers' logs of each dive and keeps every value they recorded, including GF99 and the deco ceiling.">
 <meta property="og:title" content="bottomtime">
-<meta property="og:description" content="Every dive computer you wore, on one timeline. A free Mac app for Shearwater and Garmin Descent divers.">
+<meta property="og:description" content="Every dive computer you wore, on one timeline. A free app for Mac and Windows, for Shearwater and Garmin Descent divers.">
 <meta property="og:image" content="https://snehankekre.com/bottomtime/images/dive.png">
 <link rel="icon" href="images/icon.png">
 <link rel="stylesheet" href="assets/site.css">
@@ -25,12 +25,13 @@
 
 <section class="hero">
   <h1>Every dive computer you wore, on one timeline</h1>
-  <p class="lede">bottomtime is a free Mac app for divers who wear a Shearwater and a Garmin Descent. It reads the dives both computers recorded, lines up the two logs of each dive, and keeps every value they logged, including the GF99 and deco ceiling that Shearwater's exports leave out.</p>
+  <p class="lede">bottomtime is a free app for Mac and Windows, for divers who wear a Shearwater and a Garmin Descent. It reads the dives both computers recorded, lines up the two logs of each dive, and keeps every value they logged, including the GF99 and deco ceiling that Shearwater's exports leave out.</p>
   <div class="buttons">
     <a class="button primary" href="https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac.zip">Download for Apple silicon Macs</a>
     <a class="button" href="https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac-intel.zip">Download for Intel Macs</a>
+    <a class="button" href="https://github.com/snehankekre/bottomtime/releases/download/v0.8.0b1/bottomtime-windows.zip">Download for Windows</a>
   </div>
-  <p class="small">Free and open source, for macOS 11 or newer. <a href="manual.html#installing-bottomtime">Which Mac do I have, and how do I install it?</a></p>
+  <p class="small">Free and open source, for macOS 11 or newer and 64-bit Windows 10 or 11. <a href="manual.html#installing-bottomtime">How to install it, and which Mac you have</a></p>
 </section>
 
 <figure class="shot">
@@ -61,7 +62,7 @@
   <img src="images/dive-list.png" width="1280" height="920" alt="The dive list, with a chart of max depth for every dive by date above a sortable table of dives">
   <div>
     <h2>Getting your dives in</h2>
-    <p>If Shearwater Cloud's desktop app is on your Mac, bottomtime reads its dives directly, with nothing to export. For your Garmin, sign in to Garmin Connect once, and bottomtime downloads the original file of every dive your watch has synced.</p>
+    <p>If Shearwater Cloud's desktop app is on your computer, bottomtime reads its dives directly, with nothing to export. For your Garmin, sign in to Garmin Connect once, and bottomtime downloads the original file of every dive your watch has synced.</p>
     <p>After a dive trip, sync your computers as usual and open bottomtime. It picks up the new dives by itself. You can also add Garmin <code>.fit</code> files and Shearwater Cloud database exports by hand.</p>
     <p>The first time you open it, a short tour shows you around. <a href="manual.html">The manual</a> covers the rest.</p>
   </div>
@@ -69,13 +70,13 @@
 
 <section class="band">
   <div>
-    <h2>Your dives stay on your Mac</h2>
+    <h2>Your dives stay on your computer</h2>
     <p>bottomtime keeps an untouched copy of every file it reads, Garmin's original files and each copy of Shearwater Cloud's database, and builds your dive list from those copies. If anything goes wrong, the list can be rebuilt from them.</p>
     <p>It sends nothing about your dives anywhere. It contacts Garmin Connect only to download your dives, and GitHub only to check for a new version.</p>
   </div>
   <div>
     <h2>Checked against the manufacturers' own numbers</h2>
-    <p>Decoded Shearwater values match Shearwater's XML export on all 142 dives I exported, and GF99 is within one point of Shearwater Cloud's end-of-dive GF99 on all 144. bottomtime has been tested with a Perdix 2, a Petrel 3 on a Choptima CCR, and a Descent Mk3. <a href="how-it-works.html">How it works</a> explains the matching and the checks.</p>
+    <p>Decoded Shearwater values match Shearwater's XML export on all 142 dives I exported, and GF99 is within one point of Shearwater Cloud's end-of-dive GF99 on all 144. bottomtime has been tested with a Perdix 2, a Petrel 3 on a Choptima CCR, and a Descent Mk3, and on Windows against Shearwater Cloud's Windows app. <a href="how-it-works.html">How it works</a> explains the matching and the checks.</p>
   </div>
 </section>
 

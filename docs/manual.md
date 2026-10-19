@@ -1,13 +1,14 @@
 ---
 title: Manual
-description: How to install and use the bottomtime Mac app.
+description: How to install and use the bottomtime app on a Mac or on Windows.
 ---
 
 # The bottomtime manual
 
-This manual is for divers using the bottomtime Mac app. You don't need to know
-anything about programming to follow it. If you'd rather use the command line
-or Python, see [Command line and Python](cli.md).
+This manual is for divers using the bottomtime app on a Mac or on Windows. You
+don't need to know
+anything about programming to follow it. If you'd rather use the command
+line or Python, see [Command line and Python](cli.md).
 
 bottomtime collects the dives from your Shearwater and your Garmin Descent and
 shows them together. When you wore both computers on the same dive, it lines
@@ -33,8 +34,13 @@ it as spreadsheet files that you can open without bottomtime.
 
 ## Installing bottomtime
 
-bottomtime runs on macOS 11 Big Sur or newer. There are two downloads, one
-for each kind of Mac. To see which you have, open the Apple menu and choose
+bottomtime runs on macOS 11 Big Sur or newer, and on 64-bit Windows 10 or 11.
+Everything it needs is inside the download. You don't have to install Python
+or anything else.
+
+### On a Mac
+
+There are two downloads, one for each kind of Mac. To see which you have, open the Apple menu and choose
 About This Mac. If the line that says Chip starts with "Apple M", you have an
 Apple silicon Mac. If there's a line that says Processor and it names Intel,
 you have an Intel Mac.
@@ -54,8 +60,21 @@ you have an Intel Mac.
    Open Anyway, and enter your Mac's password if it asks.
 5. Open bottomtime again. From now on it opens normally.
 
-Everything bottomtime needs is inside the app. You don't have to install
-Python or anything else.
+### On Windows
+
+1. Download [`bottomtime-windows.zip`](https://github.com/snehankekre/bottomtime/releases/download/v0.8.0b1/bottomtime-windows.zip).
+2. Right-click the zip file, choose Extract All, and extract it somewhere you
+   keep your own files, such as Documents. You get a folder called
+   `bottomtime`.
+3. Open that folder and double-click `bottomtime.exe`. Windows will say
+   "Windows protected your PC". Click More info, then Run anyway. This
+   happens because bottomtime isn't signed with a code-signing certificate,
+   which costs money every year. Windows asks only the first time.
+4. To find bottomtime again later, right-click `bottomtime.exe` and choose
+   Pin to Start.
+
+The Windows version is new. If anything looks wrong, please
+[report it](#when-something-goes-wrong).
 
 ## Getting your dives in
 
@@ -69,17 +88,17 @@ harm.
 ### Shearwater
 
 bottomtime reads the dives that Shearwater Cloud's desktop app keeps on your
-Mac, so there's nothing to export.
+computer, so there's nothing to export.
 
 1. Open Shearwater Cloud and download your dives from your computer the way
    you normally do. Check that it shows your latest dive.
 2. In bottomtime, click **Read Shearwater Cloud**.
 
 If the button is greyed out, Shearwater Cloud's desktop app isn't installed on
-this Mac. You can install it from Shearwater's website, or, if Shearwater
-Cloud is on another computer, use its File menu, choose Export, then Export
-Database, copy the `.db` file it saves to this Mac, and add it with **Add
-files…**.
+this computer. You can install it from Shearwater's website, or, if
+Shearwater Cloud is on another computer, use its File menu, choose Export,
+then Export Database, copy the `.db` file it saves to this computer, and add
+it with **Add files…**.
 
 ### Garmin Descent
 
@@ -279,7 +298,7 @@ published, whether there's a newer version. Nothing about your dives is sent.
 you sign in to or out of Garmin Connect.
 
 **Your data** shows the folder where bottomtime keeps everything, with a
-button to open it in Finder.
+button to open it in Finder on a Mac or File Explorer on Windows.
 
 - **Rebuild from saved files** throws away the dive list and builds it again
   from the files bottomtime saved. Nothing is downloaded. Use it if something
@@ -295,9 +314,10 @@ report a problem.
 ## Updating bottomtime
 
 When a new version is out, a line at the top of the window says so. Click
-**Download it**, then replace the bottomtime in your Applications folder with
-the new one, the same way you installed it. macOS may ask you to allow it in
-Privacy & Security again.
+**Download it**. On a Mac, replace the bottomtime in your Applications folder
+with the new one, the same way you installed it, and macOS may ask you to
+allow it in Privacy & Security again. On Windows, extract the new zip file and
+replace your old `bottomtime` folder with the new one.
 
 The first time a new version opens, it may say "Updating your dives for this
 version of bottomtime" while it rebuilds your dive list from the files it
@@ -312,9 +332,9 @@ you were doing. You'll need a free GitHub account to send it.
 
 The messages you're most likely to see:
 
-**"Shearwater Cloud's desktop app wasn't found on this Mac."** bottomtime
-looks for Shearwater Cloud's dives in the folder Shearwater Cloud's Mac app
-keeps them in, and found none. Install Shearwater Cloud, or export a database
+**"Shearwater Cloud's desktop app wasn't found on this computer."**
+bottomtime looks for Shearwater Cloud's dives in the folder Shearwater
+Cloud's desktop app keeps them in, and found none. Install Shearwater Cloud, or export a database
 from it on another computer and use **Add files…**.
 
 **"…couldn't read a database. If Shearwater Cloud is syncing, wait for it to
@@ -351,12 +371,17 @@ reads.
 **Rebuild from saved files**.
 
 **macOS says bottomtime can't be opened.** Follow steps 3 to 5 of
-[Installing bottomtime](#installing-bottomtime).
+[Installing bottomtime on a Mac](#on-a-mac).
+
+**Windows says "Windows protected your PC".** Click More info, then Run
+anyway.
 
 ## Your data and your privacy
 
-Everything bottomtime has stays on your Mac, in the folder
-`~/Library/Application Support/bottomtime`. That folder holds:
+Everything bottomtime has stays on your computer. On a Mac it's in the folder
+`~/Library/Application Support/bottomtime`, and on Windows it's in
+`%APPDATA%\bottomtime`, which is usually
+`C:\Users\yourname\AppData\Roaming\bottomtime`. That folder holds:
 
 - `dives.db`, your dive list.
 - `archive`, an untouched copy of every file bottomtime has read: each
@@ -372,8 +397,8 @@ which you can turn off in Settings.
 ## Removing bottomtime
 
 To remove bottomtime and everything it saved, open Settings, click **Delete
-everything…** and confirm, then drag bottomtime from Applications to the
-Trash. Your dives in Shearwater Cloud and Garmin Connect stay where they are.
+everything…** and confirm. Then, on a Mac, drag bottomtime from Applications
+to the Trash, or on Windows, delete the `bottomtime` folder you extracted. Your dives in Shearwater Cloud and Garmin Connect stay where they are.
 
 ## Terms
 
