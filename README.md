@@ -5,7 +5,7 @@ with an app for Mac and Windows for divers who don't use a terminal.
 
 **[Website](https://snehankekre.com/bottomtime/)** ·
 **[Download for Mac](https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac.zip)** ·
-**[Download for Windows](https://github.com/snehankekre/bottomtime/releases/download/v0.8.0b1/bottomtime-windows.zip)** ·
+**[Download for Windows](https://github.com/snehankekre/bottomtime/releases/download/v0.8.0b2/bottomtime-windows.zip)** ·
 **[Manual](https://snehankekre.com/bottomtime/manual.html)** ·
 **[Command line and Python](https://snehankekre.com/bottomtime/cli.html)**
 
@@ -65,7 +65,7 @@ everything it needs inside it.
 
 1. Download [`bottomtime-mac.zip`](https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac.zip)
    for an Apple silicon Mac, [`bottomtime-mac-intel.zip`](https://github.com/snehankekre/bottomtime/releases/latest/download/bottomtime-mac-intel.zip)
-   for an Intel Mac, or [`bottomtime-windows.zip`](https://github.com/snehankekre/bottomtime/releases/download/v0.8.0b1/bottomtime-windows.zip)
+   for an Intel Mac, or [`bottomtime-windows.zip`](https://github.com/snehankekre/bottomtime/releases/download/v0.8.0b2/bottomtime-windows.zip)
    for Windows. On a Mac, unzip it and drag `bottomtime` into Applications. On
    Windows, extract it and open `bottomtime.exe` in the `bottomtime` folder.
 2. Open it. macOS will say it can't verify the app, because the app isn't
