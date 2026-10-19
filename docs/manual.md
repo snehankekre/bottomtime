@@ -62,7 +62,7 @@ you have an Intel Mac.
 
 ### On Windows
 
-1. Download [`bottomtime-windows.zip`](https://github.com/snehankekre/bottomtime/releases/download/v0.8.0b2/bottomtime-windows.zip).
+1. Download [`bottomtime-windows.zip`](https://github.com/snehankekre/bottomtime/releases/download/v0.8.0b3/bottomtime-windows.zip).
 2. Right-click the zip file, choose Extract All, and extract it somewhere you
    keep your own files, such as Documents. You get a folder called
    `bottomtime`.
@@ -296,8 +296,10 @@ and °F everywhere in the app. Exported files stay metric.
 Connect each time it opens. It only starts once you've added dives yourself,
 so bottomtime never reads Shearwater Cloud before you've asked it to.
 
-**Tell me when a new version is out** asks GitHub, where bottomtime is
-published, whether there's a newer version. Nothing about your dives is sent.
+**Keep bottomtime up to date** lets bottomtime check GitHub, where it's
+published, for a new version each time it opens, and download and install it.
+Nothing about your dives is sent. Turn it off and bottomtime never contacts
+GitHub.
 
 **Accounts** shows which Shearwater Cloud account bottomtime reads, and lets
 you sign in to or out of Garmin Connect.
@@ -318,11 +320,20 @@ report a problem.
 
 ## Updating bottomtime
 
-When a new version is out, a line at the top of the window says so. Click
-**Download it**. On a Mac, replace the bottomtime in your Applications folder
-with the new one, the same way you installed it, and macOS may ask you to
-allow it in Privacy & Security again. On Windows, extract the new zip file and
-replace your old `bottomtime` folder with the new one.
+bottomtime checks for a new version each time it opens. When there is one, it
+downloads it in the background, and a line at the top of the window says it's
+ready. The new version installs when you quit bottomtime, or straight away if
+you click **Restart now**. macOS and Windows don't ask you to approve it
+again.
+
+bottomtime can update itself only where it's allowed to change its own files.
+On a Mac, that means bottomtime has to be in your Applications folder. If you
+opened it from Downloads, or it's in a folder you can't change, the line at
+the top says a new version is out and offers **Download it** instead. Install
+that version the way you installed the first one.
+
+Versions older than 0.8.0 can't update themselves. If you have one, install
+the newest version by hand once, and it keeps itself up to date from then on.
 
 The first time a new version opens, it may say "Updating your dives for this
 version of bottomtime" while it rebuilds your dive list from the files it
@@ -396,8 +407,8 @@ Everything bottomtime has stays on your computer. On a Mac it's in the folder
 - `settings.json`, your settings.
 
 bottomtime sends nothing about your dives anywhere. It contacts Garmin Connect
-only to download your dives, and GitHub only to check for a new version,
-which you can turn off in Settings.
+only to download your dives, and GitHub only to check for and download new
+versions of bottomtime, which you can turn off in Settings.
 
 ## Removing bottomtime
 
