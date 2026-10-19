@@ -1,15 +1,27 @@
 name: shearwater cloud on windows
 
-# Installs Shearwater Cloud's Windows app, opens it without signing in, and
-# checks that it made its users folder where bottomtime looks for it. Run by
-# hand, since it downloads Shearwater's installer.
+# Installs Shearwater Cloud's Windows app, opens it, and checks that it made
+# its users folder where bottomtime looks for it. With sign_in, it also signs
+# in with the SHEARWATER_EMAIL and SHEARWATER_PASSWORD secrets, waits for the
+# sync, and reads the dives the way the app's Read Shearwater Cloud button
+# does. Screenshots after sign-in show the account, so they're encrypted with
+# the SCREEN_KEY secret before upload. Run by hand, since it downloads
+# Shearwater's installer.
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      sign_in:
+        description: Sign in, wait for the sync, and read the dives
+        type: boolean
+        default: false
 
 jobs:
   check:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    env:
+      SIGN_IN: ${{ inputs.sign_in }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -23,37 +35,89 @@ jobs:
           "installer: $url"
           Invoke-WebRequest $url -OutFile swc.exe
           Start-Process swc.exe -ArgumentList /S -Wait
-      - name: Open it for a minute
+      - name: Open it
         shell: pwsh
+        env:
+          EMAIL: ${{ secrets.SHEARWATER_EMAIL }}
+          PASSWORD: ${{ secrets.SHEARWATER_PASSWORD }}
         run: |
-          $exe = Get-ChildItem $env:ProgramFiles, ${env:ProgramFiles(x86)} -Recurse -Filter "Shearwater*.exe" -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -notmatch "unins" } | Select-Object -First 1
-          "app: $($exe.FullName)"
-          $p = Start-Process $exe.FullName -PassThru
-          Start-Sleep 60
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-          $bmp.Save("screen.png")
-          # Click Sign In (bottom right at 1024x768) and see what comes up.
           Add-Type -Name U -Namespace W -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y); [DllImport("user32.dll")] public static extern void mouse_event(int f, int x, int y, int d, int e);'
-          [W.U]::SetCursorPos(852, 643); [W.U]::mouse_event(2, 0, 0, 0, 0); [W.U]::mouse_event(4, 0, 0, 0, 0)
-          Start-Sleep 15
-          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-          $bmp.Save("signin.png")
-          Get-Process | Where-Object { $_.MainWindowTitle } | Format-Table Name, MainWindowTitle -AutoSize
-          Stop-Process $p -ErrorAction SilentlyContinue
-      - name: What it wrote
-        shell: pwsh
+          function Shot($name) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save($name)
+          }
+          # Positions are for the 1024x768 screen GitHub's runners have.
+          function Click($x, $y) { [W.U]::SetCursorPos($x, $y); [W.U]::mouse_event(2, 0, 0, 0, 0); [W.U]::mouse_event(4, 0, 0, 0, 0); Start-Sleep 1 }
+          function Type($s) { [System.Windows.Forms.SendKeys]::SendWait(($s -replace '([+^%~(){}\[\]])', '{$1}')); Start-Sleep 1 }
+
+          $exe = Get-ChildItem ${env:ProgramFiles(x86)}, $env:ProgramFiles -Recurse -Filter ShearwaterCloudDesktop.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          "app: $($exe.FullName)"
+          Start-Process $exe.FullName
+          Start-Sleep 60
+          Shot screen.png
+          Click 852 643      # Sign In
+          Start-Sleep 10
+          Shot signin.png
+          if ($env:SIGN_IN -ne "true") { exit 0 }
+
+          New-Item -ItemType Directory private | Out-Null
+          Click 930 497; Type $env:EMAIL
+          Click 930 538; Type $env:PASSWORD
+          Click 922 625      # Login
+          # Wait up to 15 minutes for an account folder, then for its database
+          # to stop growing for a minute.
+          $users = "$env:USERPROFILE\AppData\LocalLow\Shearwater Research\Shearwater\users"
+          $last = -1; $still = 0
+          for ($i = 1; $i -le 180; $i++) {
+            Start-Sleep 5
+            if ($i % 12 -eq 0) { Shot "private\after-$($i * 5)s.png" }
+            $db = Get-ChildItem $users -Directory | Where-Object Name -ne loadinguser |
+              ForEach-Object { Join-Path $_.FullName dive_data.db } | Where-Object { Test-Path $_ } | Select-Object -First 1
+            if (-not $db) { continue }
+            $size = (Get-ChildItem "$db*" | Measure-Object Length -Sum).Sum
+            if ($size -eq $last) { $still++ } else { $still = 0; $last = $size }
+            if ($still -ge 12) { break }
+          }
+          Shot private\end.png
+          "account folder: $([bool]$db), database and journal bytes: $last, waited $($i * 5) s"
+      - name: Read the dives as the app does
+        if: inputs.sign_in
+        env:
+          EMAIL: ${{ secrets.SHEARWATER_EMAIL }}
+        shell: python
         run: |
-          Get-ChildItem "$env:USERPROFILE\AppData\LocalLow" -Recurse -Depth 4 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
-          "--- every dive_data.db under the user profile:"
-          Get-ChildItem $env:USERPROFILE -Recurse -Filter dive_data.db -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
-      - name: bottomtime looks in the same place
-        run: python -c "from bottomtime.app import CLOUD_USERS as u; print(u, u.is_dir()); raise SystemExit(0 if u.is_dir() else 1)"
+          import os, sqlite3, tempfile, time
+          from pathlib import Path
+          from bottomtime.app import Api, find_shearwater_cloud
+
+          path = find_shearwater_cloud()
+          print("found a signed-in database:", path is not None)
+          print("its folder is the account:", bool(path) and path.parent.name.lower() == os.environ["EMAIL"].lower())
+          home = Path(tempfile.mkdtemp())
+          api = Api(home)
+          print(api.import_shearwater_cloud())
+          while api.progress()["busy"]:
+              time.sleep(0.5)
+          print("error:", api.progress()["error"])
+          con = sqlite3.connect(home / "dives.db")
+          for q in ("SELECT count(*) FROM source_dives WHERE source = 'shearwater'",
+                    "SELECT count(*) FROM shearwater_samples",
+                    "SELECT count(*) FROM shearwater_samples WHERE gf99 IS NOT NULL"):
+              print(q, "->", con.execute(q).fetchone()[0])
+          raise SystemExit(0 if path and api.progress()["error"] is None else 1)
+      - name: Encrypt the screenshots taken after sign-in
+        if: always() && inputs.sign_in
+        shell: bash
+        env:
+          KEY: ${{ secrets.SCREEN_KEY }}
+        run: tar -cf private.tar private && openssl enc -aes-256-cbc -pbkdf2 -salt -in private.tar -out private.tar.enc -pass env:KEY && rm -rf private private.tar
       - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: screen
-          path: '*.png'
+          name: screens
+          path: |
+            *.png
+            private.tar.enc
