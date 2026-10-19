@@ -5,8 +5,8 @@ name: shearwater cloud on windows
 # in with the SHEARWATER_EMAIL and SHEARWATER_PASSWORD secrets, waits for the
 # sync, and reads the dives the way the app's Read Shearwater Cloud button
 # does. Screenshots after sign-in show the account, so they're encrypted with
-# the SCREEN_KEY secret before upload. Signing in also tries Garmin Connect
-# with GARMIN_EMAIL and GARMIN_PASSWORD and downloads the dives, the way the
+# the SCREEN_KEY secret before upload. With garmin, it also signs in to Garmin
+# Connect with GARMIN_EMAIL and GARMIN_PASSWORD and downloads the dives, the way the
 # app's Garmin Connect button does. Run by hand, since it downloads
 # Shearwater's installer.
 
@@ -15,6 +15,10 @@ on:
     inputs:
       sign_in:
         description: Sign in, wait for the sync, and read the dives
+        type: boolean
+        default: false
+      garmin:
+        description: Also sign in to Garmin Connect and download the dives
         type: boolean
         default: false
 
@@ -53,7 +57,7 @@ jobs:
           }
           # Positions are for the 1024x768 screen GitHub's runners have.
           function Click($x, $y) { [W.U]::SetCursorPos($x, $y); [W.U]::mouse_event(2, 0, 0, 0, 0); [W.U]::mouse_event(4, 0, 0, 0, 0); Start-Sleep 1 }
-          function Type($s) { [System.Windows.Forms.SendKeys]::SendWait(($s -replace '([+^%~(){}\[\]])', '{$1}')); Start-Sleep 1 }
+          function TypeText($s) { [System.Windows.Forms.SendKeys]::SendWait(($s -replace '([+^%~(){}\[\]])', '{$1}')); Start-Sleep 1 }
 
           $exe = Get-ChildItem ${env:ProgramFiles(x86)}, $env:ProgramFiles -Recurse -Filter ShearwaterCloudDesktop.exe -ErrorAction SilentlyContinue | Select-Object -First 1
           "app: $($exe.FullName)"
@@ -66,8 +70,8 @@ jobs:
           if ($env:SIGN_IN -ne "true") { exit 0 }
 
           New-Item -ItemType Directory private | Out-Null
-          Click 930 497; Type $env:EMAIL
-          Click 930 538; Type $env:PASSWORD
+          Click 930 497; TypeText $env:EMAIL
+          Click 930 538; TypeText $env:PASSWORD
           Click 922 625      # Login
           # Wait up to 15 minutes for an account folder, then for its database
           # to stop growing for a minute.
@@ -111,7 +115,7 @@ jobs:
               print(q, "->", con.execute(q).fetchone()[0])
           raise SystemExit(0 if path and api.progress()["error"] is None else 1)
       - name: Download the Garmin dives as the app does
-        if: always() && inputs.sign_in
+        if: always() && inputs.garmin
         env:
           GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
           GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
