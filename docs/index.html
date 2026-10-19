@@ -68,15 +68,33 @@
   </div>
 </section>
 
+<section class="features steps">
+  <div class="intro">
+    <h2>How it works</h2>
+    <p>Four steps turn two computers' files into one dive. The <a href="how-it-works.html">How it works</a> page has every threshold and the numbers behind each step.</p>
+  </div>
+  <div>
+    <h2>1. Keep every original</h2>
+    <p>Each file bottomtime reads is saved untouched, named by its SHA-256 hash, so the same file is never stored twice. Your dive list is built from those copies and can be rebuilt from them at any time.</p>
+  </div>
+  <div>
+    <h2>2. Read every value</h2>
+    <p>Shearwater logs are decoded from Shearwater's own format with <a href="https://github.com/snehankekre/pnf">pnf</a>, and Garmin files with Garmin's FIT SDK. Anything bottomtime can't interpret yet is kept byte for byte, for a later version to read.</p>
+  </div>
+  <div>
+    <h2>3. Line up the computers</h2>
+    <p>The time zone comes from the Garmin. Then one depth profile slides along the other, up to five minutes each way, until the shapes match. Pool sessions are matched on depth instead. No log is merged or resampled.</p>
+  </div>
+  <div>
+    <h2>4. Check against the manufacturers</h2>
+    <p>Decoded values match Shearwater's XML export on all 142 dives I exported, GF99 matches Shearwater Cloud's end-of-dive figure on all 144, and every matched pair must agree on depth. Tested with a Perdix 2, a Petrel 3 on a Choptima CCR, and a Descent Mk3.</p>
+  </div>
+</section>
+
 <section class="band">
   <div>
     <h2>Your dives stay on your computer</h2>
-    <p>bottomtime keeps an untouched copy of every file it reads, Garmin's original files and each copy of Shearwater Cloud's database, and builds your dive list from those copies. If anything goes wrong, the list can be rebuilt from them.</p>
-    <p>It sends nothing about your dives anywhere. It contacts Garmin Connect only to download your dives, and GitHub only to download new versions of bottomtime, which it installs by itself.</p>
-  </div>
-  <div>
-    <h2>Checked against the manufacturers' own numbers</h2>
-    <p>Decoded Shearwater values match Shearwater's XML export on all 142 dives I exported, and GF99 is within one point of Shearwater Cloud's end-of-dive GF99 on all 144. bottomtime has been tested with a Perdix 2, a Petrel 3 on a Choptima CCR, and a Descent Mk3, and on Windows against Shearwater Cloud's Windows app. <a href="how-it-works.html">How it works</a> explains the matching and the checks.</p>
+    <p>bottomtime sends nothing about your dives anywhere. It contacts Garmin Connect only to download your dives, and GitHub only to download new versions of bottomtime, which it installs by itself.</p>
   </div>
 </section>
 

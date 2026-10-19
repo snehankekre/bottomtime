@@ -71,6 +71,9 @@ img { max-width: 100%; height: auto; }
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .features h2 { font-size: 19px; margin: 0 0 6px; }
 .features p { margin: 0; color: var(--text-secondary); }
+.features .intro { grid-column: 1 / -1; }
+.features.steps { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+.features .intro h2 { font-size: 24px; }
 .band { max-width: 1080px; margin: 0 auto; padding: 48px 16px 8px; display: grid; gap: 32px; align-items: center;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
 .band h2 { font-size: 24px; margin: 0 0 10px; }
