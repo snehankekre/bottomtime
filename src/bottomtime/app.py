@@ -33,7 +33,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from . import __version__
-from .api import compare_logs, dive_summaries, load_dive, source_logs, write_dive_csv
+from .api import compare_logs, computers, dive_summaries, load_dive, write_dive_csv
 from .store import db as store_db
 
 UI = Path(__file__).parent / "app_ui" / "index.html"
@@ -523,29 +523,45 @@ CHANNELS = {
 
 def dive_chart(db: Path, dive_id: int) -> dict:
     dive = load_dive(db, dive_id=dive_id)
+    # One entry per computer. A computer with several logs (a Shearwater ends
+    # a dive at each surface interval) gets one series, with an empty point
+    # between its logs so the lines break where it wasn't logging.
     logs = []
-    for source, log in source_logs(dive):
-        samples = log["samples"]
-        series = {"t": [round(log["offset_s"] + t, 1) for t in samples["t_s"]]}
-        for name, column in CHANNELS.get(source, {}).items():
-            values = samples.get(column)
-            if values and any(v is not None for v in values):
+    for source, group in computers(dive):
+        channels = {
+            name: column
+            for name, column in CHANNELS.get(source, {}).items()
+            if any(v is not None for log in group for v in log["samples"].get(column) or [])
+        }
+        series = {"t": [], **{name: [] for name in channels}}
+        for log in group:
+            samples = log["samples"]
+            t = [round(log["offset_s"] + x, 1) for x in samples["t_s"]]
+            if series["t"] and t:
+                series["t"].append(round((series["t"][-1] + t[0]) / 2, 1))
+                for name in channels:
+                    series[name].append(None)
+            series["t"] += t
+            for name, column in channels.items():
+                values = samples.get(column) or [None] * len(t)
                 if column == "tts_s":
                     values = [None if v is None else v / 60 for v in values]
-                series[name] = values
+                series[name] += values
+        first = group[0]
         logs.append(
             {
                 "source": source,
-                "name": log["name"],
-                "computer": log["computer"]["model"] or source,
-                "serial": log["computer"]["serial"],
-                "start_local": log["start_time_local"],
-                "duration_s": log["duration_s"],
-                "max_depth_m": log["max_depth_m"],
-                "mode": log["mode"],
+                "name": next((log["name"] for log in group if log["name"]), None),
+                "computer": first["computer"]["model"] or source,
+                "serial": first["computer"]["serial"],
+                "logs": len(group),
+                "start_local": first["start_time_local"],
+                "duration_s": sum(log["duration_s"] or 0 for log in group),
+                "max_depth_m": max(log["max_depth_m"] or 0 for log in group),
+                "mode": first["mode"],
                 "gases": [
                     f"{g['o2_pct']:g}/{g['he_pct']:g}"
-                    for g in log["gases"]
+                    for g in first["gases"]
                     if g["enabled"] and (g["o2_pct"] or g["he_pct"])
                 ],
                 "series": series,

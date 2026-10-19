@@ -708,7 +708,9 @@ function renderDive() {
     const add = (a, b) => { if (!b) return; const x = document.createElement("dt"); x.textContent = a; const y = document.createElement("dd"); y.textContent = b; dl.append(x, y); };
     add("Serial", log.serial && String(log.serial));
     add("Started", log.start_local && log.start_local.slice(11, 19) + " on its clock");
-    add("Runtime", fmtDur(log.duration_s));
+    // A Shearwater ends a dive at each surface interval, so one computer can have several logs.
+    add("Logs", log.logs > 1 && `${log.logs}, one for each time it ended a dive at the surface`);
+    add("Runtime", fmtDur(log.duration_s) + (log.logs > 1 ? " in all" : ""));
     add("Max depth", fmtDepth(log.max_depth_m));
     add("Mode", fmtMode(log.mode));
     add("Gases", log.gases.join(", "));
@@ -767,6 +769,7 @@ function renderCompare() {
     ["CNS at the end", (l) => (l.cns_end == null ? "" : num(l.cns_end) + "%")],
     ["Runtime", (l) => fmtDur(l.duration_s)],
   ];
+  if (L.some((l) => l.logs > 1)) ROWS.push(["Logs", (l) => String(l.logs)]);
   const table = $("d-compare-table");
   table.textContent = "";
   const head = document.createElement("tr");

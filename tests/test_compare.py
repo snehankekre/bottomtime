@@ -3,7 +3,7 @@
 from bottomtime.api import compare_logs, depth_gap
 
 
-def _log(model, density, depths, step_s, offset_s=0.0, source="shearwater"):
+def _log(model, density, depths, step_s, offset_s=0.0, source="shearwater", device=None):
     t = [i * step_s for i in range(len(depths))]
     samples = {"t_s": t, "depth_m": depths, "cns_pct": [5] * len(depths)}
     if source == "shearwater":
@@ -11,6 +11,7 @@ def _log(model, density, depths, step_s, offset_s=0.0, source="shearwater"):
     else:
         samples["next_stop_depth_m"] = [0] * len(depths)
     return {
+        "device": device or model,
         "offset_s": offset_s,
         "sample_interval_ms": step_s * 1000,
         "max_depth_m": max(depths),
@@ -42,3 +43,14 @@ def test_readings_are_paired_on_the_shared_timeline():
 
 def test_one_log_has_nothing_to_compare():
     assert compare_logs({"sources": {"garmin": [_log("Descent Mk3", 1025, [10] * 30, 1, source="garmin")]}}) is None
+
+
+def test_a_computer_split_into_several_logs_is_one_computer():
+    # The Perdix ended a dive at the surface halfway; the Descent kept going.
+    first = _log("Perdix 2", 1020, [min(i, 20) for i in range(30)], 10)
+    second = _log("Perdix 2", 1020, [min(i, 20) for i in range(30)], 10, offset_s=400)
+    descent = _log("Descent Mk3", 1000, [min(i % 40, 20) * 1.02 for i in range(70)], 10, source="garmin")
+    c = compare_logs({"sources": {"garmin": [descent], "shearwater": [second, first]}})
+    assert [(r["computer"], r["logs"]) for r in c["logs"]] == [("Descent Mk3", 1), ("Perdix 2", 2)]
+    assert c["logs"][1]["duration_s"] == 2 * 290
+    assert len(c["depth"]) == 1

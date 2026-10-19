@@ -201,6 +201,11 @@ computer's serial number, the time the dive started by that computer's own
 clock, the runtime and max depth that computer recorded, its mode, and the
 gases it had set up, written as oxygen/helium (21/0 is air, 50/0 is EAN50).
 
+A Shearwater ends a dive after a set time at the surface, so a session with
+surface breaks, such as skills practice, can leave it with several logs where
+the Garmin kept one going. bottomtime puts those logs on one card, says how
+many there were, and adds up their runtimes.
+
 ### How the computers compared
 
 When two computers logged the dive, a box under the cards compares them.

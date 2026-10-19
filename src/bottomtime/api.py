@@ -92,34 +92,40 @@ def depth_gap(a: tuple[list, list], b: tuple[list, list]) -> dict | None:
 
 def compare_logs(dive: dict) -> dict | None:
     """What each computer said about the same dive, side by side, and how far
-    apart their depths were. None for a dive with one log."""
-    logs = list(source_logs(dive))
-    if len(logs) < 2:
+    apart their depths were. None for a dive with one computer."""
+    groups = computers(dive)
+    if len(groups) < 2:
         return None
     rows, series = [], []
-    for source, log in logs:
-        s, info = log["samples"], log["computer"]
-        step_min = (log["sample_interval_ms"] or 1000) / 60000
-        if source == "shearwater":
-            deco = sum(v or 0 for v in s.get("in_deco", [])) * step_min
-        else:
-            deco = sum(1 for v in s.get("next_stop_depth_m", []) if v and v > 0) * step_min
-        cns = [v for v in s.get("cns_pct", []) if v is not None]
+    for source, logs in groups:
+        info = logs[0]["computer"]
+        deco, cns, times, depths = 0.0, [], [], []
+        for log in logs:
+            s = log["samples"]
+            step_min = (log["sample_interval_ms"] or 1000) / 60000
+            if source == "shearwater":
+                deco += sum(v or 0 for v in s.get("in_deco", [])) * step_min
+            else:
+                deco += sum(1 for v in s.get("next_stop_depth_m", []) if v and v > 0) * step_min
+            cns += [v for v in s.get("cns_pct", []) if v is not None]
+            times += [log["offset_s"] + t for t in s["t_s"]]
+            depths += s["depth_m"]
         rows.append({
             "computer": info["model"] or source,
+            "logs": len(logs),
             "water_density": info["water_density"],
             "gf_low": info["gf_low"],
             "gf_high": info["gf_high"],
             "deco_model": info["deco_model"],
-            "max_depth_m": log["max_depth_m"],
-            "duration_s": log["duration_s"],
+            "max_depth_m": max(log["max_depth_m"] or 0 for log in logs),
+            "duration_s": sum(log["duration_s"] or 0 for log in logs),
             "deco_min": round(deco, 1),
             "cns_end": cns[-1] if cns else None,
         })
-        series.append(([log["offset_s"] + t for t in s["t_s"]], s["depth_m"]))
-    # Every other log against the first, the one that started earliest.
+        series.append((times, depths))
+    # Every other computer against the first.
     depth = []
-    for i in range(1, len(logs)):
+    for i in range(1, len(groups)):
         gap = depth_gap(series[0], series[i])
         ref, other = rows[0]["water_density"], rows[i]["water_density"]
         if gap and ref and other:
@@ -229,6 +235,18 @@ def source_logs(dive: dict):
             yield source, log
 
 
+def computers(dive: dict) -> list[tuple[str, list[dict]]]:
+    """(source, logs) for each computer on a loaded dive, its logs in time
+    order. A Shearwater ends a dive at each surface interval, so it can have
+    several logs where a Garmin kept one going."""
+    groups: dict[str, tuple[str, list]] = {}
+    for source, log in source_logs(dive):
+        groups.setdefault(log["device"], (source, []))[1].append(log)
+    for _source, logs in groups.values():
+        logs.sort(key=lambda log: log["offset_s"])
+    return list(groups.values())
+
+
 def write_dive_csv(dive: dict, fh: TextIO) -> None:
     """Every sample of every log of a loaded dive, one row per sample, never
     merged. dive_time_s puts all the logs on the dive's shared timeline."""
@@ -276,29 +294,37 @@ def dive_summaries(db_path: str | Path) -> list[dict]:
 
         members: dict[int, list] = defaultdict(list)
         for r in con.execute(
-            "SELECT dm.dive_id, dm.offset_s, sd.id, sd.source, sd.model, sd.mode, sd.name"
+            "SELECT dm.dive_id, dm.offset_s, sd.id, sd.source, sd.device, sd.model, sd.mode, sd.name"
             " FROM dive_members dm JOIN source_dives sd ON sd.id = dm.source_dive_id"
             " ORDER BY dm.offset_s"
         ):
             members[r["dive_id"]].append(r)
 
-        def depth_gap_pct(logs):
-            """The largest gap between the first log and any other, unsigned."""
-            series = []
+        def by_computer(logs):
+            groups: dict[str, list] = {}
             for m in logs:
-                table = SOURCES[m["source"]]["samples"]
-                rows = con.execute(
-                    f"SELECT t_s, depth_m FROM {table} WHERE source_dive_id=? ORDER BY t_s", (m["id"],)
-                ).fetchall()
-                series.append(([m["offset_s"] + r[0] for r in rows], [r[1] for r in rows]))
+                groups.setdefault(m["device"], []).append(m)
+            return list(groups.values())
+
+        def depth_gap_pct(groups):
+            """The largest gap between the first computer and any other, unsigned."""
+            series = []
+            for group in groups:
+                times, depths = [], []
+                for m in group:
+                    table = SOURCES[m["source"]]["samples"]
+                    for t, d in con.execute(
+                        f"SELECT t_s, depth_m FROM {table} WHERE source_dive_id=? ORDER BY t_s", (m["id"],)
+                    ):
+                        times.append(m["offset_s"] + t)
+                        depths.append(d)
+                series.append((times, depths))
             gaps = [depth_gap(series[0], other) for other in series[1:]]
             gaps = [abs(g["pct"]) for g in gaps if g]
             return max(gaps) if gaps else None
 
-        def spread(logs, key):
-            values = [per_log.get(m["id"], {}).get(key) for m in logs]
-            values = [v or 0 for v in values]
-            return max(values) - min(values) if len(values) > 1 else None
+        def deco_by_computer(groups):
+            return [sum(per_log.get(m["id"], {}).get("deco_min") or 0 for m in g) for g in groups]
 
         def best(logs, key):
             values = [per_log.get(m["id"], {}).get(key) for m in logs]
@@ -308,6 +334,8 @@ def dive_summaries(db_path: str | Path) -> list[dict]:
         out = []
         for d in con.execute("SELECT * FROM dives ORDER BY start_time_utc"):
             logs = members[d["id"]]
+            groups = by_computer(logs)
+            deco = deco_by_computer(groups)
             out.append(
                 {
                     "number": d["dive_number"],
@@ -317,7 +345,7 @@ def dive_summaries(db_path: str | Path) -> list[dict]:
                     "duration_s": d["duration_s"],
                     "max_depth_m": d["max_depth_m"],
                     "is_test": bool(d["is_test"]),
-                    "computers": [m["model"] or m["source"] for m in logs],
+                    "computers": [g[0]["model"] or g[0]["source"] for g in groups],
                     # A Shearwater site name is one the diver typed, so it wins.
                     "name": next((m["name"] for m in logs if m["source"] == "shearwater" and m["name"]), None)
                     or next((m["name"] for m in logs if m["name"]), None),
@@ -326,9 +354,9 @@ def dive_summaries(db_path: str | Path) -> list[dict]:
                     "gf99_max": best(logs, "gf99_max"),
                     "gf99_surf": best(logs, "gf99_surf"),
                     "cns_pct": best(logs, "cns"),
-                    "deco_min": best(logs, "deco_min"),
-                    "depth_gap_pct": depth_gap_pct(logs) if len(logs) > 1 else None,
-                    "deco_gap_min": spread(logs, "deco_min"),
+                    "deco_min": max(deco) if any(m["id"] in per_log for m in logs) else None,
+                    "depth_gap_pct": depth_gap_pct(groups) if len(groups) > 1 else None,
+                    "deco_gap_min": max(deco) - min(deco) if len(deco) > 1 else None,
                 }
             )
         return out

@@ -100,12 +100,12 @@ depth gap, and the ratio of the two density settings is the part the settings
 explain. Both are on the dive's page, along with each computer's gradient
 factors, minutes of required stops, and CNS at the end.
 
-On my dives, 61 matched pairs have enough readings below 5 m. In every one,
-the two computers were set to different water densities. On 23 of them the
-Descent was on fresh water and the Perdix on EN13319, and those differ by a
-median of 1.7%. The settings explain the whole gap, to within 0.25 points, on
-23 of the 61. The median gap the settings don't explain is 0.29 points, or
-0.12 m. Two dives in December 2025 differ by 6%, with the Perdix a steady 0.6
+Of my dives, 58 were logged by two computers with enough readings below 5 m.
+In every one, the two computers were set to different water densities. On 20
+of them the Descent was on fresh water and the Perdix on EN13319, and those
+differ by a median of 1.7%. The settings explain the whole gap, to within 0.25
+points, on 22 of the 58. The median gap the settings don't explain is 0.32
+points. Two dives in December 2025 differ by 6%, with the Perdix a steady 0.6
 to 0.8 m shallower than the Descent at 9 to 15 m, which looks like where each
 computer was worn.
 
