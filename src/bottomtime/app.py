@@ -16,6 +16,7 @@ import io
 import json
 import os
 import platform
+import re
 import secrets
 import shutil
 import sqlite3
@@ -38,7 +39,7 @@ from .store import db as store_db
 
 UI = Path(__file__).parent / "app_ui" / "index.html"
 REPO = "https://github.com/snehankekre/bottomtime"
-RELEASES_API = "https://api.github.com/repos/snehankekre/bottomtime/releases/latest"
+RELEASES_API = "https://api.github.com/repos/snehankekre/bottomtime/releases?per_page=20"
 
 # Shearwater Cloud's desktop app keeps its live database in Unity's
 # persistentDataPath, under users/<account>/dive_data.db ('loadinguser' is a
@@ -72,6 +73,38 @@ def data_dir() -> Path:
         path = Path.home() / ".bottomtime"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def version_key(v: str) -> tuple:
+    """Sortable form of a version such as 0.8.0 or 0.8.0b2, where 0.8.0b2
+    comes before 0.8.0."""
+    m = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:b(\d+))?", v)
+    if not m:
+        return (0,)
+    return (int(m[1]), int(m[2]), int(m[3]), int(m[4]) if m[4] else 10**9)
+
+
+def update_asset() -> str | None:
+    """The release file this copy of the app updates from."""
+    if sys.platform == "win32":
+        return "bottomtime-windows.zip"
+    if sys.platform == "darwin":
+        # An Intel build reports x86_64 even under Rosetta, so it stays Intel.
+        return "bottomtime-mac.zip" if platform.machine() == "arm64" else "bottomtime-mac-intel.zip"
+    return None
+
+
+def app_location() -> Path | None:
+    """The .app or folder this copy runs from, if it's a built app that can
+    replace itself there."""
+    if not getattr(sys, "frozen", False):
+        return None
+    exe = Path(sys.executable)
+    place = exe.parents[2] if sys.platform == "darwin" else exe.parent
+    # macOS runs an app it hasn't moved out of Downloads from a read-only copy.
+    if sys.platform == "darwin" and (place.suffix != ".app" or "AppTranslocation" in str(place)):
+        return None
+    return place if os.access(place, os.W_OK) and os.access(place.parent, os.W_OK) else None
 
 
 def find_shearwater_cloud() -> Path | None:
@@ -108,6 +141,7 @@ class Api:
         self._mfa = None
         self._lock = threading.Lock()
         self._job = {"busy": False, "message": "", "error": None, "detail": None}
+        self._update = {"asset": None, "staged": None, "error": None}
         try:
             store_db.connect(self._db).close()
             self._outdated = False
@@ -177,22 +211,109 @@ class Api:
         return {"idle": True}
 
     def check_for_update(self) -> dict:
+        """Say whether a newer version is out and, when this copy can replace
+        itself, start downloading it."""
         if not self.settings()["check_updates"]:
             return {}
         try:
             req = urllib.request.Request(RELEASES_API, headers={"Accept": "application/vnd.github+json"})
             with urllib.request.urlopen(req, timeout=5) as r:
-                latest = json.load(r)
+                releases = json.load(r)
         except Exception:  # noqa: BLE001 - offline is not an error worth showing
             return {}
-        tag = latest.get("tag_name", "").lstrip("v")
+        # BOTTOMTIME_TEST_VERSION lets a test run an old copy's update path.
+        current = os.environ.get("BOTTOMTIME_TEST_VERSION") or __version__
+        # A test build hears about test builds. Everyone else hears only about releases.
+        testing = "b" in current
+        candidates = [r for r in releases if not r.get("draft") and (testing or not r.get("prerelease"))]
+        # Prefer the newest release that has this computer's download. A release
+        # can be out for a few minutes before CI attaches its Windows zip.
+        candidates = [r for r in candidates if any(a["name"] == update_asset() for a in r.get("assets", []))] or candidates
+        latest = max(candidates, key=lambda r: version_key(r["tag_name"]), default=None)
+        if not latest or version_key(latest["tag_name"]) <= version_key(current):
+            return {}
+        tag = latest["tag_name"].lstrip("v")
+        asset = next((a for a in latest.get("assets", []) if a["name"] == update_asset()), None)
+        place = app_location()
+        if asset and place and not self._update["asset"]:
+            self._update["asset"] = asset
+            threading.Thread(target=self._stage_update, args=(asset["browser_download_url"], place), daemon=True).start()
+        return {"latest": tag, "url": latest.get("html_url"), "downloading": bool(self._update["asset"])}
 
-        def parts(v: str) -> tuple:
-            return tuple(int(p) for p in v.split(".") if p.isdigit())
+    def update_status(self) -> dict:
+        return {"ready": self._update["staged"] is not None, "error": self._update["error"]}
 
-        if tag and parts(tag) > parts(__version__):
-            return {"latest": tag, "url": latest.get("html_url", f"{REPO}/releases/latest")}
+    def _stage_update(self, url: str, place: Path) -> None:
+        """Download and unpack the new version next to this one. It replaces
+        this one when the app quits or restarts, never while it runs."""
+        work = Path(tempfile.mkdtemp(prefix=".bottomtime-update-", dir=place.parent))
+        try:
+            archive = work / "update.zip"
+            with urllib.request.urlopen(url, timeout=120) as r, open(archive, "wb") as f:
+                shutil.copyfileobj(r, f)
+            if sys.platform == "darwin":
+                subprocess.run(["ditto", "-x", "-k", str(archive), str(work)], check=True)
+                # A download cut short or tampered with in transit fails here.
+                subprocess.run(["codesign", "--verify", "--deep", "--strict", str(work / "bottomtime.app")],
+                               check=True, capture_output=True)
+            else:
+                with zipfile.ZipFile(archive) as z:
+                    z.extractall(work)
+                if not (work / "bottomtime" / "bottomtime.exe").is_file():
+                    raise ValueError("The update doesn't contain bottomtime.exe.")
+            archive.unlink()
+            self._update["staged"] = work
+        except Exception as e:  # noqa: BLE001
+            traceback.print_exc()
+            shutil.rmtree(work, ignore_errors=True)
+            self._update["error"] = str(e) or type(e).__name__
+
+    def restart(self) -> dict:
+        """Install the downloaded version and open it."""
+        if not self._update["staged"] or not app_location():
+            return {"error": "There's no downloaded update to install."}
+        self.finish_update(relaunch=True)
+        threading.Timer(0.3, lambda: os._exit(0)).start()
         return {}
+
+    def finish_update(self, relaunch: bool = False) -> None:
+        """Swap in the downloaded version, if there is one. Called as the app
+        quits, so an update the diver didn't restart for still installs."""
+        work, place = self._update["staged"], app_location()
+        if not work or not place:
+            return
+        self._update["staged"] = None
+        if sys.platform == "darwin":
+            old = work / "old.app"
+            os.rename(place, old)
+            try:
+                os.rename(work / "bottomtime.app", place)
+            except OSError:
+                os.rename(old, place)
+                raise
+            shutil.rmtree(work, ignore_errors=True)
+            if relaunch:
+                subprocess.Popen(["open", "-n", str(place)])
+            return
+        # Windows won't replace a running program's files, so a script waits
+        # for this copy to exit, then moves the new files in. It touches only
+        # bottomtime.exe and _internal, never anything else in the folder.
+        pid, new = os.getpid(), work / "bottomtime"
+        script = place.parent / f".bottomtime-update-{pid}.cmd"
+        script.write_text(
+            "@echo off\r\n"
+            ":wait\r\n"
+            f'tasklist /FI "PID eq {pid}" | find "{pid}" >nul && (ping -n 2 127.0.0.1 >nul & goto wait)\r\n'
+            f'rmdir /s /q "{place}\\_internal"\r\n'
+            f'del /q "{place}\\bottomtime.exe"\r\n'
+            f'move "{new}\\_internal" "{place}\\_internal" >nul\r\n'
+            f'move "{new}\\bottomtime.exe" "{place}\\bottomtime.exe" >nul\r\n'
+            f'rmdir /s /q "{work}"\r\n'
+            + (f'start "" "{place}\\bottomtime.exe"\r\n' if relaunch else "")
+            + '(goto) 2>nul & del "%~f0"\r\n',
+            newline="",
+        )
+        subprocess.Popen(["cmd", "/c", str(script)], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
     # ---- importing ----
 
@@ -614,13 +735,15 @@ def export_zip(db: Path) -> bytes:
 def run(browser: bool = False, home: Path | None = None) -> int:
     api = Api(home or data_dir())
     if browser:
-        return _serve(api)
-    import webview
+        _serve(api)
+    else:
+        import webview
 
-    api._window = webview.create_window(
-        "bottomtime", url=str(UI), js_api=api, width=1280, height=860, min_size=(900, 600)
-    )
-    webview.start()
+        api._window = webview.create_window(
+            "bottomtime", url=str(UI), js_api=api, width=1280, height=860, min_size=(900, 600)
+        )
+        webview.start()
+    api.finish_update()
     return 0
 
 

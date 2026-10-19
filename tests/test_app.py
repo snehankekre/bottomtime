@@ -1,5 +1,7 @@
 """The app's backend, without a window."""
 
+import io
+import json
 import sqlite3
 import time
 
@@ -67,3 +69,30 @@ def test_a_rejected_garmin_sign_in_signs_out(tmp_path, monkeypatch):
     api.garmin_sync()
     assert "sign in again" in _wait(api)["error"]
     assert not api.overview()["garmin_signed_in"]
+
+
+def test_versions_sort_with_test_builds_before_their_release():
+    assert app.version_key("0.8.0b2") < app.version_key("v0.8.0") < app.version_key("0.8.1b1")
+    assert app.version_key("0.8.0b1") < app.version_key("0.8.0b2")
+
+
+def test_only_test_builds_hear_about_test_builds(tmp_path, monkeypatch):
+    releases = [
+        {"tag_name": "v0.9.0b1", "prerelease": True, "html_url": "b", "assets": []},
+        {"tag_name": "v0.8.0", "prerelease": False, "html_url": "r", "assets": []},
+    ]
+
+    class Reply(io.BytesIO):
+        def __enter__(self):
+            return self
+
+    monkeypatch.setattr(app.urllib.request, "urlopen", lambda *a, **k: Reply(json.dumps(releases).encode()))
+    api = app.Api(tmp_path)
+    monkeypatch.setattr(app, "__version__", "0.7.0")
+    assert api.check_for_update()["latest"] == "0.8.0"
+    monkeypatch.setattr(app, "__version__", "0.8.0b2")
+    assert api.check_for_update()["latest"] == "0.9.0b1"
+    monkeypatch.setattr(app, "__version__", "0.9.0")
+    assert api.check_for_update() == {}
+    # Run from source, so there's no app to replace and nothing downloads.
+    assert api.update_status() == {"ready": False, "error": None}

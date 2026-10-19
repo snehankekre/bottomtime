@@ -1,5 +1,5 @@
 """Entry point for the packaged app. --browser shows the UI in a browser tab,
-which is also how the built app gets tested.
+which is also how the built app gets tested. --update-test is described below.
 
 --selftest opens the real window on an empty store, waits for the page to
 say whether Shearwater Cloud is installed (which needs the page's script and
@@ -10,6 +10,26 @@ console, so it also writes what it saw to selftest.txt in the current folder."""
 import sys
 
 from bottomtime.app import run
+
+if "--update-test" in sys.argv:
+    # CI: with BOTTOMTIME_TEST_VERSION set older than the newest release,
+    # download that release, then install it the way quitting does.
+    import tempfile
+    import time
+    from pathlib import Path
+
+    from bottomtime import app
+
+    api = app.Api(Path(tempfile.mkdtemp()))
+    found = api.check_for_update()
+    for _ in range(180):
+        status = api.update_status()
+        if status["ready"] or status["error"]:
+            break
+        time.sleep(1)
+    Path("update.txt").write_text(f"{found} {status}\n")
+    api.finish_update()
+    sys.exit(0 if status["ready"] else 1)
 
 if "--selftest" not in sys.argv:
     sys.exit(run(browser="--browser" in sys.argv))

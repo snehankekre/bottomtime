@@ -304,7 +304,7 @@
   <section>
     <h3>When bottomtime opens</h3>
     <label class="choice"><input type="checkbox" id="s-check"> <span>Look for new dives<small>Reads Shearwater Cloud and checks Garmin Connect, if you're signed in.</small></span></label>
-    <label class="choice"><input type="checkbox" id="s-updates"> <span>Tell me when a new version is out<small>Asks GitHub, where bottomtime is published. Nothing about your dives is sent.</small></span></label>
+    <label class="choice"><input type="checkbox" id="s-updates"> <span>Keep bottomtime up to date<small>Downloads new versions from GitHub, where bottomtime is published, and installs them when you quit. Nothing about your dives is sent.</small></span></label>
   </section>
   <section>
     <h3>Accounts</h3>
@@ -1116,7 +1116,8 @@ addEventListener("keydown", (e) => {
   if (e.key === "Escape" && touring) return endTour();
   if (e.key === "Escape" && current && !document.querySelector("dialog[open]")) backToList();
 });
-$("update-get").onclick = () => call("open_link", "releases");
+let update = null;
+$("update-get").onclick = () => (update && update.ready ? call("restart") : call("open_link", "releases"));
 $("update-hide").onclick = () => { $("update").hidden = true; };
 $("f-search").oninput = renderList;
 for (const id of ["f-from", "f-to", "f-tests", "f-metric"]) $(id).onchange = renderList;
@@ -1129,8 +1130,23 @@ addEventListener("resize", () => {
 async function start() {
   await refresh();
   startJob(call("startup"));
+  watchUpdate();
+}
+// A copy that can replace itself downloads the new version in the background
+// and installs it when it quits, or right away on Restart now.
+async function watchUpdate() {
   const u = await call("check_for_update");
-  if (u.latest) { $("update-text").textContent = `bottomtime ${u.latest} is out. You have ${overview.version}.`; $("update").hidden = false; }
+  if (!u.latest) return;
+  update = u;
+  const show = (text, button) => { $("update-text").textContent = text; $("update-get").textContent = button; $("update").hidden = false; };
+  const manual = (why) => show(`bottomtime ${u.latest} is out${why}. You have ${overview.version}.`, "Download it");
+  if (!u.downloading) return manual("");
+  for (;;) {
+    const s = await call("update_status");
+    if (s.ready) { update.ready = true; return show(`bottomtime ${u.latest} is ready. It installs when you quit bottomtime, or now if you restart.`, "Restart now"); }
+    if (s.error) return manual(", but bottomtime couldn't download it");
+    await new Promise((r) => setTimeout(r, 2000));
+  }
 }
 if (token) start();
 else if (window.pywebview && window.pywebview.api) start();

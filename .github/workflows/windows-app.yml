@@ -34,6 +34,28 @@ jobs:
           $p = Start-Process dist/bottomtime/bottomtime.exe -ArgumentList --selftest -Wait -PassThru
           Get-Content selftest.txt
           exit $p.ExitCode
+      - name: Update itself from the newest test build
+        shell: pwsh
+        env:
+          BOTTOMTIME_TEST_VERSION: 0.8.0b1
+        run: |
+          New-Item -ItemType Directory updtest | Out-Null
+          Copy-Item -Recurse dist/bottomtime updtest/bottomtime
+          $before = (Get-FileHash updtest/bottomtime/bottomtime.exe).Hash
+          $p = Start-Process updtest/bottomtime/bottomtime.exe -ArgumentList --update-test -Wait -PassThru
+          Get-Content update.txt
+          if ($p.ExitCode) { exit 1 }
+          # The swap runs from a script once the app has exited.
+          for ($i = 0; $i -lt 60 -and ((Get-FileHash updtest/bottomtime/bottomtime.exe -ErrorAction SilentlyContinue).Hash -in @($before, $null)); $i++) { Start-Sleep 1 }
+          Start-Sleep 5
+          "exe replaced: $((Get-FileHash updtest/bottomtime/bottomtime.exe).Hash -ne $before)"
+          "left over: $(@(Get-ChildItem updtest -Force -Filter '.bottomtime-update*').Count)"
+          Get-ChildItem updtest/bottomtime | Select-Object -ExpandProperty Name
+          if ((Get-FileHash updtest/bottomtime/bottomtime.exe).Hash -eq $before) { exit 1 }
+          if (@(Get-ChildItem updtest -Force -Filter '.bottomtime-update*').Count) { exit 1 }
+          $q = Start-Process updtest/bottomtime/bottomtime.exe -ArgumentList --selftest -Wait -PassThru
+          Get-Content selftest.txt
+          exit $q.ExitCode
       - run: Compress-Archive dist/bottomtime bottomtime-windows.zip
       - uses: actions/upload-artifact@v4
         with:
