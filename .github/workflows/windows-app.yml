@@ -1,0 +1,45 @@
+name: windows app
+
+# Builds the Windows app, opens its window once to check the page works, and
+# attaches bottomtime-windows.zip to each published release.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install .[app] pyinstaller
+      - run: >
+          pyinstaller --noconfirm --log-level WARN --windowed --name bottomtime
+          --icon packaging/bottomtime.ico
+          --collect-data bottomtime --collect-all curl_cffi
+          packaging/launch.py
+      - name: Open the window once
+        shell: pwsh
+        run: |
+          $p = Start-Process dist/bottomtime/bottomtime.exe -ArgumentList --selftest -Wait -PassThru
+          Get-Content selftest.txt
+          exit $p.ExitCode
+      - run: Compress-Archive dist/bottomtime bottomtime-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bottomtime-windows
+          path: bottomtime-windows.zip
+      - if: github.event_name == 'release'
+        run: gh release upload ${{ github.event.release.tag_name }} bottomtime-windows.zip --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -1,6 +1,6 @@
 """Draw the app icon: a dive profile, steep descent, bottom time, then deco
 stops on the way up. Writes packaging/bottomtime.icns (needs Pillow and
-macOS's iconutil). Run it again only if the design changes."""
+macOS's iconutil) and packaging/bottomtime.ico for Windows. Run it again only if the design changes."""
 
 import subprocess
 import tempfile
@@ -40,4 +40,5 @@ with tempfile.TemporaryDirectory() as tmp:
         draw(px).save(iconset / f"icon_{px}x{px}.png")
         draw(px * 2).save(iconset / f"icon_{px}x{px}@2x.png")
     subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(HERE / "bottomtime.icns")], check=True)
-print("wrote packaging/bottomtime.icns")
+draw(256).save(HERE / "bottomtime.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+print("wrote packaging/bottomtime.icns and packaging/bottomtime.ico")

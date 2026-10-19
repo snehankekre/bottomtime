@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import os
 import platform
 import secrets
 import shutil
@@ -39,13 +40,18 @@ UI = Path(__file__).parent / "app_ui" / "index.html"
 REPO = "https://github.com/snehankekre/bottomtime"
 RELEASES_API = "https://api.github.com/repos/snehankekre/bottomtime/releases/latest"
 
-# Shearwater Cloud's desktop app keeps its live database here on a Mac, one
-# folder per signed-in account ('loadinguser' is a placeholder before sign-in).
-CLOUD_USERS = (
-    Path.home()
-    / "Library/Containers/research.shearwater.cloud/Data/Library"
-    / "Application Support/research.shearwater.cloud/users"
-)
+# Shearwater Cloud's desktop app keeps its live database in Unity's
+# persistentDataPath, under users/<account>/dive_data.db ('loadinguser' is a
+# placeholder before sign-in). On Windows, Unity puts that folder in LocalLow,
+# named after the company and product in the app's app.info.
+if sys.platform == "win32":
+    CLOUD_USERS = Path.home() / "AppData/LocalLow/Shearwater Research/Shearwater/users"
+else:
+    CLOUD_USERS = (
+        Path.home()
+        / "Library/Containers/research.shearwater.cloud/Data/Library"
+        / "Application Support/research.shearwater.cloud/users"
+    )
 
 DEFAULT_SETTINGS = {
     "units": "metric",          # 'metric' | 'imperial', display only
@@ -60,6 +66,8 @@ DEFAULT_SETTINGS = {
 def data_dir() -> Path:
     if sys.platform == "darwin":
         path = Path.home() / "Library/Application Support/bottomtime"
+    elif sys.platform == "win32":
+        path = Path(os.environ.get("APPDATA") or Path.home() / "AppData/Roaming") / "bottomtime"
     else:
         path = Path.home() / ".bottomtime"
     path.mkdir(parents=True, exist_ok=True)
@@ -144,6 +152,7 @@ class Api:
             "data_dir": str(self._home),
             "native": self._window is not None,
             "version": __version__,
+            "os": sys.platform,
             "settings": self.settings(),
         }
 
@@ -190,7 +199,7 @@ class Api:
     def import_shearwater_cloud(self) -> dict:
         path = find_shearwater_cloud()
         if path is None:
-            return {"error": "Shearwater Cloud's desktop app wasn't found on this Mac."}
+            return {"error": "Shearwater Cloud's desktop app wasn't found on this computer."}
         return self._start("Reading Shearwater Cloud", lambda con: self._import_cloud(con, path))
 
     def choose_files(self) -> dict:
@@ -252,7 +261,10 @@ class Api:
     # ---- the data folder ----
 
     def show_data_folder(self) -> dict:
-        subprocess.run(["open", str(self._home)], check=False)
+        if sys.platform == "win32":
+            os.startfile(self._home)
+        else:
+            subprocess.run(["open" if sys.platform == "darwin" else "xdg-open", str(self._home)], check=False)
         return {}
 
     def rebuild_store(self) -> dict:
@@ -285,7 +297,7 @@ class Api:
         body = (
             f"**What happened**\n\n{message or '(describe what you were doing)'}\n\n"
             f"**Details**\n\n```\n{detail[-3000:]}\n```\n\n"
-            f"bottomtime {__version__}, macOS {platform.mac_ver()[0] or platform.platform()}"
+            f"bottomtime {__version__}, {platform.platform()}"
         )
         query = urllib.parse.urlencode({"title": message[:80] or "Problem in the app", "body": body})
         _open(f"{REPO}/issues/new?{query}")

@@ -20,7 +20,7 @@
     --series-1: #2a78d6;
     --series-2: #eb6834;
     --series-3: #1baf7a;
-    --sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -221,7 +221,7 @@
       <p>Add .fit files from a Garmin, or a .db file from Shearwater Cloud's File → Export → Export Database.</p>
       <button id="empty-btn-files">Add files…</button>
     </div></div>
-    <p class="foot">Everything stays on this Mac. <button class="link" id="empty-help">How bottomtime works</button></p>
+    <p class="foot">Everything stays on this computer. <button class="link" id="empty-help">How bottomtime works</button></p>
   </section>
 
   <section id="list" hidden>
@@ -271,7 +271,7 @@
 <dialog id="garmin">
   <div id="g-signin">
     <h2>Sign in to Garmin Connect</h2>
-    <p>bottomtime downloads your dives with your Garmin account. Your password goes only to Garmin; this Mac keeps a sign-in token, the way Garmin's own apps do.</p>
+    <p>bottomtime downloads your dives with your Garmin account. Your password goes only to Garmin; this computer keeps a sign-in token, the way Garmin's own apps do.</p>
     <form id="g-form">
       <label>Email <input type="email" id="g-email" autocomplete="username" required></label>
       <label>Password <input type="password" id="g-password" autocomplete="current-password" required></label>
@@ -339,7 +339,7 @@
   <div class="help-top"><button id="help-tour">Show me around</button><button id="help-manual">Open the full manual</button></div>
   <div class="help-body">
     <h3>Getting your dives in</h3>
-    <p><b>Shearwater.</b> bottomtime reads Shearwater Cloud's own database on this Mac, so there is nothing to export. Open Shearwater Cloud first and make sure it shows your latest dives, then click Read Shearwater Cloud. If Shearwater Cloud isn't on this Mac, export a database from it on another computer (File → Export → Export Database) and add the .db file.</p>
+    <p><b>Shearwater.</b> bottomtime reads Shearwater Cloud's own database on this computer, so there is nothing to export. Open Shearwater Cloud first and make sure it shows your latest dives, then click Read Shearwater Cloud. If Shearwater Cloud isn't on this computer, export a database from it on another computer (File → Export → Export Database) and add the .db file.</p>
     <p><b>Garmin.</b> Sign in to Garmin Connect once. bottomtime downloads the original file of every dive your watch synced, and after that only the new ones. Dives that were uploaded to Garmin Connect from another brand's computer are skipped, because bottomtime reads those computers directly and gets more from them.</p>
     <p><b>Files.</b> Add files… takes .fit files from a Garmin and .db files exported from Shearwater Cloud.</p>
     <p>Reading the same dives twice is harmless: bottomtime recognises dives it already has. Settings can make it look for new dives each time it opens.</p>
@@ -376,7 +376,7 @@
     </dl>
 
     <h3>Your data</h3>
-    <p>Everything stays on this Mac, in <span id="help-dir"></span>. bottomtime keeps an untouched copy of every file it reads, Garmin's original files and each Shearwater Cloud database, so your dives can always be rebuilt from them.</p>
+    <p>Everything stays on this computer, in <span id="help-dir"></span>. bottomtime keeps an untouched copy of every file it reads, Garmin's original files and each Shearwater Cloud database, so your dives can always be rebuilt from them.</p>
     <p>Export all saves every dive as a CSV file you can open in Excel or Numbers, plus a dives.csv with one row per dive. Each dive's file has every sample from every computer, with the units in the column names. Values in exports are always metric.</p>
     <p>bottomtime sends nothing about your dives anywhere. It contacts Garmin Connect only to download your dives, and GitHub only to check for a new version, which you can turn off in Settings.</p>
 
@@ -979,11 +979,11 @@ async function refresh() {
     const b = $(id);
     b.dataset.off = overview.shearwater_cloud ? "0" : "1";
     b.disabled = !overview.shearwater_cloud;
-    b.title = overview.shearwater_cloud ? "Read every dive Shearwater Cloud has on this Mac" : "Shearwater Cloud's desktop app isn't installed on this Mac";
+    b.title = overview.shearwater_cloud ? "Read every dive Shearwater Cloud has on this computer" : "Shearwater Cloud's desktop app isn't installed on this computer";
   }
   $("empty-cloud").textContent = overview.shearwater_cloud
-    ? "Shearwater Cloud is installed on this Mac, so bottomtime can read its dives directly. Make sure it shows your latest dives first."
-    : "Shearwater Cloud's desktop app isn't on this Mac. Install it from Shearwater's website and sync your computer, or use step 3 with an exported .db file.";
+    ? "Shearwater Cloud is installed on this computer, so bottomtime can read its dives directly. Make sure it shows your latest dives first."
+    : "Shearwater Cloud's desktop app isn't on this computer. Install it from Shearwater's website and sync your computer, or use step 3 with an exported .db file.";
   $("btn-garmin").textContent = overview.garmin_signed_in ? "Download Garmin dives" : "Garmin Connect";
   $("btn-garmin").title = overview.garmin_signed_in
     ? "Download the dives your Garmin has synced to Garmin Connect since last time" : "Sign in to Garmin Connect to download your Garmin dives";
@@ -1048,12 +1048,13 @@ function openSettings() {
   $("s-updates").checked = s.check_updates;
   $("s-cloud").textContent = overview.shearwater_cloud
     ? `Shearwater Cloud: reading the database for ${overview.shearwater_account}`
-    : "Shearwater Cloud: not installed on this Mac";
+    : "Shearwater Cloud: not installed on this computer";
   $("s-garmin").textContent = overview.garmin_signed_in
     ? `Garmin Connect: signed in${s.garmin_account ? " as " + s.garmin_account : ""}` : "Garmin Connect: not signed in";
   $("s-garmin-btn").textContent = overview.garmin_signed_in ? "Sign out" : "Sign in…";
   $("s-dir").textContent = overview.data_dir;
   $("s-finder").hidden = !native();
+  $("s-finder").textContent = {darwin: "Show in Finder", win32: "Show in File Explorer"}[overview.os] || "Show folder";
   $("s-version").textContent = `bottomtime ${overview.version}`;
   $("s-err").textContent = "";
   $("settings").showModal();
