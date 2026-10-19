@@ -796,6 +796,11 @@ function renderCompare() {
 const PANELS = [
   {key: "depth", label: () => `Depth (${depthUnit()})`, down: true, lines: [["depth", false], ["ceiling", true]], height: 280},
   {key: "gf99", name: "GF99", label: () => "GF99 (%)", lines: [["gf99", false]], height: 150},
+  {key: "surfgf", name: "Surface GF", label: (d) => {
+    const c = d.logs.map((l) => l.surfgf_check).filter((v) => v != null);
+    return "Surface GF (%), calculated by bottomtime, since computers don't record it." +
+      (c.length ? ` Its GF99 on this dive was within a median ${num(Math.max(...c), 1)} points of the Shearwater's.` : "");
+  }, lines: [["surfgf", false]], height: 150},
   {key: "ppo2", name: "ppO2", label: () => "ppO2", lines: [["ppo2", false]], height: 150},
   {key: "tts", name: "Time to surface", label: () => "Time to surface (min), with @+5 dashed", lines: [["tts", false], ["at5", true]], height: 150},
   {key: "stop", name: "Next stop", label: () => `Next stop (${depthUnit()})`, down: true, lines: [["stop", false]], height: 120},
@@ -805,7 +810,7 @@ const PANELS = [
   {key: "temp", name: "Temperature", label: () => `Temperature (${imperial() ? "°F" : "°C"})`, lines: [["temp", false]], height: 120},
   {key: "hr", name: "Heart rate", label: () => "Heart rate (bpm)", lines: [["hr", false]], height: 120},
 ];
-const LABELS = {depth: "depth", ceiling: "ceiling", gf99: "GF99", ppo2: "ppO2", temp: "temp", stop: "next stop", tts: "TTS", at5: "@+5", ndl: "NDL", cns: "CNS", n2: "N2 load", hr: "heart rate"};
+const LABELS = {depth: "depth", ceiling: "ceiling", gf99: "GF99", surfgf: "surface GF", ppo2: "ppO2", temp: "temp", stop: "next stop", tts: "TTS", at5: "@+5", ndl: "NDL", cns: "CNS", n2: "N2 load", hr: "heart rate"};
 const DEPTHS = new Set(["depth", "ceiling", "stop"]);
 function value(ch, v) {
   if (v == null) return null;
@@ -820,7 +825,7 @@ function shown(ch, v) {
   if (ch === "ppo2") return num(x, 2);
   if (ch === "cns" || ch === "n2") return num(x) + "%";
   if (ch === "hr") return num(x) + " bpm";
-  if (ch === "gf99") return num(x);
+  if (ch === "gf99" || ch === "surfgf") return num(x);
   return num(x) + " min";
 }
 
@@ -860,7 +865,7 @@ function renderPanels() {
   const cross = [];
   visible.forEach((p, pi) => {
     const last = pi === visible.length - 1, H = p.height + (last ? 26 : 0), B = last ? 26 : 6, T = 22;
-    const svg = el("svg", {width: "100%", height: H, role: "img", "aria-label": p.label()}, box);
+    const svg = el("svg", {width: "100%", height: H, role: "img", "aria-label": p.label(d)}, box);
     let hi = 0;
     for (const l of d.logs) for (const [ch] of p.lines) for (const v of l.series[ch] || []) { const x = value(ch, v); if (x != null && x > hi) hi = x; }
     hi = hi * 1.05 || 1;
@@ -870,7 +875,7 @@ function renderPanels() {
       el("line", {x1: L, x2: W - R, y1: sy(v), y2: sy(v)}, grid);
       el("text", {x: L - 6, y: sy(v) + 4, "text-anchor": "end"}, svg).textContent = v;
     }
-    el("text", {x: L, y: 12}, svg).textContent = p.label();
+    el("text", {x: L, y: 12}, svg).textContent = p.label(d);
     d.logs.forEach((log, i) => {
       for (const [ch, dash] of p.lines) {
         const ys = log.series[ch];

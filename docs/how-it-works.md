@@ -109,6 +109,39 @@ points. Two dives in December 2025 differ by 6%, with the Perdix a steady 0.6
 to 0.8 m shallower than the Descent at 9 to 15 m, which looks like where each
 computer was worn.
 
+## Surface GF
+
+Surface GF is what GF99 would be if you surfaced at that moment. Shearwater
+and Garmin computers both show it during a dive, and neither records it in
+the log. bottomtime calculates it for a Shearwater log by rebuilding the
+computer's tissue loading with the Bühlmann ZHL-16C model, the one gradient
+factors are applied to:
+
+1. The 16 nitrogen and 16 helium compartments start saturated with air at the
+   surface pressure the computer logged, or carry over from the same
+   computer's dives in the 48 hours before, off-gassing on air in between.
+2. Every 10-second sample loads them with the gas the computer logged. On a
+   rebreather the loop holds the logged ppO2, and the diluent's nitrogen and
+   helium share the rest of the pressure.
+3. Surface GF is the leading compartment's supersaturation at surface
+   pressure, as a percentage of its M-value gradient there.
+
+The same tissue state also gives a GF99 at the current depth, which the
+Shearwater did log, so every dive checks the calculation against the
+computer. Over the 4,427 readings where my Shearwaters logged a GF99 of 5 or
+more, bottomtime's GF99 was within a median 1.0 point of the computer's, 3.2
+points on 90% of readings, and 9.2 points on 99%. The worst reading was 32
+points off. On 78 of my 81 logs with such readings, the median gap was 2
+points or less. The dive page shows that gap for each dive in the chart's
+title.
+
+The calculation isn't Shearwater's own code, and a computer keeps its tissue
+state between dives in ways a log doesn't fully show, so treat it as a close
+estimate. It's left out under VPM-B and DCIEM, which don't use gradient
+factors. bottomtime doesn't calculate it for Garmin logs yet. A Garmin
+doesn't log GF99, so there would be nothing to check the calculation
+against.
+
 ## Checking itself
 
 `bottomtime verify` runs four checks, and the numbers on this site come from

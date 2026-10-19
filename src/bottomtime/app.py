@@ -35,6 +35,7 @@ from pathlib import Path
 
 from . import __version__
 from .api import compare_logs, computers, dive_summaries, load_dive, write_dive_csv
+from .deco import surface_gf
 from .store import db as store_db
 
 UI = Path(__file__).parent / "app_ui" / "index.html"
@@ -61,7 +62,7 @@ DEFAULT_SETTINGS = {
     "tour_list": False,         # the first-run tour of the dive list was shown
     "tour_dive": False,         # the first-run tour of a dive was shown
     "garmin_account": None,     # the name Garmin shows for the signed-in account
-    "charts": ["gf99", "ppo2"], # the charts shown under depth on a dive
+    "charts": ["gf99", "surfgf", "ppo2"],  # the charts shown under depth on a dive
 }
 
 
@@ -659,8 +660,12 @@ def dive_chart(db: Path, dive_id: int) -> dict:
             for name, column in CHANNELS.get(source, {}).items()
             if any(v is not None for log in group for v in log["samples"].get(column) or [])
         }
+        # Surface GF isn't in the log. bottomtime calculates it for a Shearwater.
+        calculated = [surface_gf(db, log["source_dive_id"]) for log in group] if source == "shearwater" else []
+        if any(calculated):
+            channels["surfgf"] = None
         series = {"t": [], **{name: [] for name in channels}}
-        for log in group:
+        for k, log in enumerate(group):
             samples = log["samples"]
             t = [round(log["offset_s"] + x, 1) for x in samples["t_s"]]
             if series["t"] and t:
@@ -669,6 +674,9 @@ def dive_chart(db: Path, dive_id: int) -> dict:
                     series[name].append(None)
             series["t"] += t
             for name, column in channels.items():
+                if name == "surfgf":
+                    series[name] += calculated[k]["surface_gf"] if calculated[k] else [None] * len(t)
+                    continue
                 values = samples.get(column) or [None] * len(t)
                 if column in ("tts_s", "ndl_s"):
                     values = [None if v is None else v / 60 for v in values]
@@ -691,6 +699,8 @@ def dive_chart(db: Path, dive_id: int) -> dict:
                     if g["enabled"] and (g["o2_pct"] or g["he_pct"])
                 ],
                 "series": series,
+                # How far the model's GF99 was from the logged GF99, in points.
+                "surfgf_check": max((c["gf99_gap"] for c in calculated if c and c["gf99_gap"] is not None), default=None),
             }
         )
     return {

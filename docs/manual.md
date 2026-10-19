@@ -236,20 +236,32 @@ runtime. Values that differ are in bold.
 
 ### The charts
 
-Below the cards are up to three charts on the same timeline:
+Below the cards are charts on the same timeline. Depth is always there, and
+GF99, surface GF, and ppO2 are ticked to start with:
 
 - **Depth.** Each computer has its own colour. The solid line is depth, and
   the dashed line in the same colour is the deco ceiling the Shearwater
   calculated.
 - **GF99.** Only Shearwater computers record it.
+- **Surface GF.** What GF99 would be if you surfaced at that moment. Both
+  your computers show it during the dive, but neither records it, so
+  bottomtime calculates it for a Shearwater from the depth, gas, and ppO2 it
+  logged. The chart's title says how closely bottomtime's calculation matched
+  the GF99 the Shearwater logged on that dive. [How it works](how-it-works.md#surface-gf)
+  explains the calculation.
 - **ppO2.** The partial pressure of oxygen each computer reported.
 
-Hold the pointer over the charts and a line follows it through all three
-charts, with a box listing what every computer showed at that moment: depth,
-ceiling, ppO2, temperature, next stop, time to surface, @+5, NDL, and CNS,
-whichever that computer recorded. You can also click the charts and use the
-left and right arrow keys to move through the dive in 10-second steps, or
-hold Shift for one-minute steps.
+The boxes under the legend add more charts: time to surface (with @+5
+dashed), next stop, NDL, CNS, temperature, and, from a Garmin, its N2 load and
+heart rate. Only what that dive's computers recorded is listed, and
+bottomtime remembers your choice.
+
+Hold the pointer over the charts and a line follows it through every chart,
+with a box listing what every computer showed at that moment: depth, ceiling,
+GF99, surface GF, ppO2, temperature, next stop, time to surface, @+5, NDL,
+CNS, N2 load, and heart rate, whichever that computer recorded. You can also
+click the charts and use the left and right arrow keys to move through the
+dive in 10-second steps, or hold Shift for one-minute steps.
 
 When two computers logged the dive, the line under the charts says how they
 were lined up. No two dive computers' clocks agree. bottomtime starts from
