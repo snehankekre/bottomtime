@@ -2,16 +2,19 @@
 doesn't record.
 
 bottomtime rebuilds the computer's Bühlmann ZHL-16C tissue loading from the
-log's depth, gas, and (on a rebreather) loop ppO2, carrying it over from the
-same computer's dives in the 48 hours before. The GF99 that tissue state
-implies is compared with the GF99 the computer logged, so every dive says how
-well the model agreed with the computer before its surface GF is trusted.
+log's depth, gas, and (on a rebreather) loop ppO2. It starts from the tissue
+state the computer itself wrote at the start of the log (PNF records 0x70 to
+0x75), or, for a log without one, carries it over from the same computer's
+dives in the 48 hours before. The GF99 that tissue state implies is compared
+with the GF99 the computer logged, so every dive says how well the model
+agreed with the computer.
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
+import struct
 from datetime import datetime, timedelta
 from statistics import median
 
@@ -82,6 +85,26 @@ def _run(log: dict, state):
     return (pn, ph), out
 
 
+def first_snapshot(con: sqlite3.Connection, source_dive_id: int):
+    """The tissue state a Shearwater wrote before its first sample, as
+    (16 nitrogen, 16 helium) pressures in bar, or None. A snapshot is six
+    records, 0x70 to 0x75, holding little-endian floats from byte 4: seven in
+    each of the first five records and six in the last, whose last four bytes
+    are a big-endian timestamp. The first 16 floats are nitrogen and the next
+    16 helium. The nine after that aren't known yet."""
+    rows = con.execute(
+        "SELECT type_key, payload FROM undecoded_payloads WHERE source_dive_id=? AND container='pnf_record'"
+        " AND type_key IN ('0x70','0x71','0x72','0x73','0x74','0x75') ORDER BY seq LIMIT 6",
+        (source_dive_id,),
+    ).fetchall()
+    if [k for k, _ in rows] != ["0x70", "0x71", "0x72", "0x73", "0x74", "0x75"]:
+        return None
+    values = []
+    for k, payload in rows:
+        values += struct.unpack("<6f" if k == "0x75" else "<7f", payload[4:28 if k == "0x75" else 32])
+    return values[0:16], values[16:32]
+
+
 def _log(con: sqlite3.Connection, source_dive_id: int) -> dict:
     sd = con.execute(
         "SELECT start_time_local, mode, header_json FROM source_dives WHERE id=?", (source_dive_id,)
@@ -109,6 +132,10 @@ def surface_gf(db_path, source_dive_id: int) -> dict | None:
         log = _log(con, source_dive_id)
         if log["header"].get("deco_model") not in (None, "gf"):
             return None
+        own = first_snapshot(con, source_dive_id)
+        if own:
+            _, out = _run(log, own)
+            return _result(out, log)
         device = con.execute("SELECT device FROM source_dives WHERE id=?", (source_dive_id,)).fetchone()[0]
         earlier = con.execute(
             "SELECT id FROM source_dives WHERE device=? AND start_time_local < ? AND start_time_local >= ?"
@@ -128,6 +155,10 @@ def surface_gf(db_path, source_dive_id: int) -> dict | None:
         _, out = _run(log, state)
     finally:
         con.close()
+    return _result(out, log)
+
+
+def _result(out, log) -> dict:
     gaps = [abs(m - g) for (m, _), g in zip(out, log["samples"]["gf99"]) if g is not None and g >= 5]
     return {
         "surface_gf": [round(max(sf, 0), 1) for _, sf in out],

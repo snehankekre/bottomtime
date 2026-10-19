@@ -117,30 +117,41 @@ the log. bottomtime calculates it for a Shearwater log by rebuilding the
 computer's tissue loading with the Bühlmann ZHL-16C model, the one gradient
 factors are applied to:
 
-1. The 16 nitrogen and 16 helium compartments start saturated with air at the
-   surface pressure the computer logged, or carry over from the same
-   computer's dives in the 48 hours before, off-gassing on air in between.
+1. The 16 nitrogen and 16 helium compartments start from the tissue state the
+   Shearwater wrote into the log before its first sample. A log without one
+   would start saturated with air at the surface pressure the computer logged,
+   or carry over from the same computer's dives in the 48 hours before.
 2. Every 10-second sample loads them with the gas the computer logged. On a
    rebreather the loop holds the logged ppO2, and the diluent's nitrogen and
    helium share the rest of the pressure.
 3. Surface GF is the leading compartment's supersaturation at surface
    pressure, as a percentage of its M-value gradient there.
 
-The same tissue state also gives a GF99 at the current depth, which the
-Shearwater did log, so every dive checks the calculation against the
-computer. Over the 4,427 readings where my Shearwaters logged a GF99 of 5 or
-more, bottomtime's GF99 was within a median 1.0 point of the computer's, 3.2
-points on 90% of readings, and 9.2 points on 99%. The worst reading was 32
-points off. On 78 of my 81 logs with such readings, the median gap was 2
-points or less. The dive page shows that gap for each dive in the chart's
-title.
+A Shearwater writes its tissue state into the log about every four minutes,
+in six records numbered 0x70 to 0x75. Shearwater Cloud names them as tissue
+records and doesn't read them. They hold 16 nitrogen and then 16 helium
+pressures, in bar, as little-endian floats, followed by nine more numbers I
+haven't identified and a timestamp. Started from one snapshot, bottomtime's
+model lands within a median 0.01 bar of the computer's next snapshot four
+minutes later, 0.03 bar on 90% of 1,343 such stretches on my dives, and 0.19
+bar at worst. So the tissue loading matches the computer's.
 
-The calculation isn't Shearwater's own code, and a computer keeps its tissue
-state between dives in ways a log doesn't fully show, so treat it as a close
-estimate. It's left out under VPM-B and DCIEM, which don't use gradient
-factors. bottomtime doesn't calculate it for Garmin logs yet. A Garmin
-doesn't log GF99, so there would be nothing to check the calculation
-against.
+The same tissue state also gives a GF99 at the current depth, which the
+Shearwater logs, so every dive checks the calculation against the computer.
+Over the 4,427 readings where my Shearwaters logged a GF99 of 5 or more,
+bottomtime's GF99 was within a median 1.0 point of the computer's, 3.2 points
+on 90% of readings, and 9.2 points on 99%. The worst reading was 32 points
+off. On 77 of my 81 logs with such readings, the median gap was 2 points or
+less. The dive page shows that gap for each dive in the chart's title.
+
+Since the tissues match, the gap comes from GF99 itself. The computer logs
+GF99 as a whole number, and the GF99 in a sample doesn't line up exactly with
+the depth in the same sample: the computer's own snapshot tissues agree best
+with the GF99 logged about 30 seconds after the snapshot's timestamp. The
+calculation also isn't Shearwater's own code, so treat it as a close estimate.
+It's left out under VPM-B and DCIEM, which don't use gradient factors.
+bottomtime doesn't calculate it for Garmin logs yet. A Garmin doesn't log
+GF99, so there would be nothing to check the calculation against.
 
 ## Checking itself
 
