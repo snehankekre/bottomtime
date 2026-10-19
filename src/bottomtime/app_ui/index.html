@@ -126,6 +126,7 @@
   .key.dash { border-top-style: dashed; }
   .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin: 0 0 6px; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  #d-charts label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
   .panels { position: relative; }
   .compare { margin-bottom: 14px; }
   .compare h2 { font-size: 14px; margin: 0 0 6px; }
@@ -258,6 +259,7 @@
     </div>
     <div class="card">
       <div class="legend" id="d-legend"></div>
+      <div class="legend" id="d-charts"></div>
       <div class="panels" id="panels" tabindex="0" aria-label="Dive charts. Use the left and right arrow keys to move through the dive."></div>
       <p class="note" id="d-note"></p>
     </div>
@@ -360,7 +362,7 @@
     <p>Click a column to sort by it. The chart above the list plots any of these columns for each dive by date; pick the column with Chart, and click a dot to open that dive.</p>
 
     <h3>Reading a dive</h3>
-    <p>Each computer gets its own colour. The solid line is depth, and the dashed line in the same colour is the deco ceiling the Shearwater calculated. Below are GF99 and ppO2 on the same time axis. Move the pointer over the charts, or use the arrow keys, to read every computer at the same moment.</p>
+    <p>Each computer gets its own colour. The solid line is depth, and the dashed line in the same colour is the deco ceiling the Shearwater calculated. Below are GF99 and ppO2 on the same time axis. Tick the boxes under the legend to chart anything else the computers recorded, such as time to surface, CNS, or temperature. Move the pointer over the charts, or use the arrow keys, to read every computer at the same moment.</p>
     <p>No two dive computers' clocks agree. bottomtime takes the time zone from the Garmin, then slides one depth profile against the other until they match best. The seconds left over are shown under the chart. Neither log is changed, merged, or resampled.</p>
     <p>When two computers logged the dive, How the computers compared says how far apart their depths were below 5 m, and how much of that their water density settings explain. A computer set to lighter water reads deeper: fresh water (1000 kg/m³) reads 2% deeper than EN13319 (1020). Shearwater's "salt" is 1030 kg/m³ and Garmin's is 1025. Below that, a table puts each computer's settings, required stops, and CNS side by side, with the values that differ in bold.</p>
 
@@ -789,12 +791,21 @@ function renderCompare() {
   }
 }
 
+// Depth is always shown. The others are listed under the legend for any
+// computer that recorded them, and the diver's choice is saved in settings.
 const PANELS = [
   {key: "depth", label: () => `Depth (${depthUnit()})`, down: true, lines: [["depth", false], ["ceiling", true]], height: 280},
-  {key: "gf99", label: () => "GF99 (%)", lines: [["gf99", false]], height: 150},
-  {key: "ppo2", label: () => "ppO2", lines: [["ppo2", false]], height: 150},
+  {key: "gf99", name: "GF99", label: () => "GF99 (%)", lines: [["gf99", false]], height: 150},
+  {key: "ppo2", name: "ppO2", label: () => "ppO2", lines: [["ppo2", false]], height: 150},
+  {key: "tts", name: "Time to surface", label: () => "Time to surface (min), with @+5 dashed", lines: [["tts", false], ["at5", true]], height: 150},
+  {key: "stop", name: "Next stop", label: () => `Next stop (${depthUnit()})`, down: true, lines: [["stop", false]], height: 120},
+  {key: "ndl", name: "NDL", label: () => "NDL (min)", lines: [["ndl", false]], height: 120},
+  {key: "cns", name: "CNS", label: () => "CNS (%)", lines: [["cns", false]], height: 120},
+  {key: "n2", name: "N2 load", label: () => "N2 load (%), as the Garmin reports it", lines: [["n2", false]], height: 120},
+  {key: "temp", name: "Temperature", label: () => `Temperature (${imperial() ? "°F" : "°C"})`, lines: [["temp", false]], height: 120},
+  {key: "hr", name: "Heart rate", label: () => "Heart rate (bpm)", lines: [["hr", false]], height: 120},
 ];
-const LABELS = {depth: "depth", ceiling: "ceiling", gf99: "GF99", ppo2: "ppO2", temp: "temp", stop: "next stop", tts: "TTS", at5: "@+5", ndl: "NDL", cns: "CNS"};
+const LABELS = {depth: "depth", ceiling: "ceiling", gf99: "GF99", ppo2: "ppO2", temp: "temp", stop: "next stop", tts: "TTS", at5: "@+5", ndl: "NDL", cns: "CNS", n2: "N2 load", hr: "heart rate"};
 const DEPTHS = new Set(["depth", "ceiling", "stop"]);
 function value(ch, v) {
   if (v == null) return null;
@@ -807,7 +818,8 @@ function shown(ch, v) {
   if (DEPTHS.has(ch)) return num(x, ch === "depth" && !imperial() ? 1 : 0) + " " + depthUnit();
   if (ch === "temp") return num(x) + (imperial() ? " °F" : " °C");
   if (ch === "ppo2") return num(x, 2);
-  if (ch === "cns") return num(x) + "%";
+  if (ch === "cns" || ch === "n2") return num(x) + "%";
+  if (ch === "hr") return num(x) + " bpm";
   if (ch === "gf99") return num(x);
   return num(x) + " min";
 }
@@ -829,7 +841,22 @@ function renderPanels() {
   const t0 = Math.min(...all), t1 = Math.max(...all);
   const W = box.clientWidth || 900, L = 52, R = 16;
   const sx = scale(t0, t1, L, W - R);
-  const visible = PANELS.filter((p) => d.logs.some((l) => p.lines.some(([ch]) => l.series[ch])));
+  const recorded = PANELS.filter((p) => d.logs.some((l) => p.lines.some(([ch]) => l.series[ch])));
+  const chosen = settings().charts || [];
+  const picker = $("d-charts");
+  picker.textContent = "";
+  if (recorded.length > 1) picker.append(Object.assign(document.createElement("span"), {textContent: "Charts:"}));
+  for (const p of recorded.slice(1)) {
+    const label = document.createElement("label"), box = document.createElement("input");
+    box.type = "checkbox"; box.checked = chosen.includes(p.key);
+    box.onchange = async () => {
+      const next = box.checked ? [...chosen, p.key] : chosen.filter((k) => k !== p.key);
+      overview.settings = await call("set_setting", "charts", next);
+      renderPanels();
+    };
+    label.append(box, p.name); picker.append(label);
+  }
+  const visible = recorded.filter((p) => p.key === "depth" || chosen.includes(p.key));
   const cross = [];
   visible.forEach((p, pi) => {
     const last = pi === visible.length - 1, H = p.height + (last ? 26 : 0), B = last ? 26 : 6, T = 22;

@@ -61,6 +61,7 @@ DEFAULT_SETTINGS = {
     "tour_list": False,         # the first-run tour of the dive list was shown
     "tour_dive": False,         # the first-run tour of a dive was shown
     "garmin_account": None,     # the name Garmin shows for the signed-in account
+    "charts": ["gf99", "ppo2"], # the charts shown under depth on a dive
 }
 
 
@@ -639,7 +640,7 @@ def _open(url: str) -> None:
 # Channels the charts and tooltip show, per source: name -> column.
 CHANNELS = {
     "garmin": {"depth": "depth_m", "ppo2": "po2", "temp": "temp_c", "stop": "next_stop_depth_m",
-               "tts": "tts_s", "cns": "cns_pct"},
+               "tts": "tts_s", "ndl": "ndl_s", "cns": "cns_pct", "n2": "n2_load", "hr": "heart_rate"},
     "shearwater": {"depth": "depth_m", "ceiling": "ceiling_m", "gf99": "gf99", "ppo2": "avg_ppo2",
                    "temp": "temp_c", "stop": "stop_depth_m", "tts": "tts_min", "at5": "at_plus_five_min",
                    "ndl": "ndl_min", "cns": "cns_pct"},
@@ -669,7 +670,7 @@ def dive_chart(db: Path, dive_id: int) -> dict:
             series["t"] += t
             for name, column in channels.items():
                 values = samples.get(column) or [None] * len(t)
-                if column == "tts_s":
+                if column in ("tts_s", "ndl_s"):
                     values = [None if v is None else v / 60 for v in values]
                 series[name] += values
         first = group[0]
