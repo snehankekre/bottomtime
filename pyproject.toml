@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bottomtime"
-version = "0.8.0b3"
+version = "0.8.0"
 description = "Lossless dive-log store: ingest, decode, and reconcile dives from Garmin (FIT) and Shearwater (Petrel Native Format) dive computers"
 readme = "README.md"
 license = "MIT"
