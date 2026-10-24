@@ -44,3 +44,51 @@ def test_the_computers_own_tissue_snapshot_is_read_as_16_nitrogen_and_16_helium(
     assert [round(v, 3) for v in n2] == [round(v, 3) for v in values[:16]]
     assert [round(v, 4) for v in he] == [round(v, 4) for v in values[16:32]]
     assert first_snapshot(con, 2) is None
+
+
+def _snapshot_rows(con, source_dive_id, seq, ts, n2, he):
+    import struct
+
+    values = list(n2) + list(he) + [0.0] * 9
+    for k in range(6):
+        floats = values[k * 7:k * 7 + (6 if k == 5 else 7)]
+        payload = bytes([0x70 + k, 0, 0, 0]) + struct.pack("<%df" % len(floats), *floats)
+        payload += struct.pack(">I", ts) if k == 5 else b""
+        con.execute("INSERT INTO undecoded_payloads (source_dive_id, container, type_key, seq, payload) VALUES (?, 'pnf_record', ?, ?, ?)",
+                    (source_dive_id, f"0x{0x70 + k:x}", seq + k, payload))
+
+
+def test_tissues_start_again_from_each_snapshot_the_computer_wrote(tmp_path):
+    import json
+    import sqlite3
+
+    from bottomtime.deco import tissues
+
+    db = tmp_path / "t.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE source_dives (id, start_time_local, mode, header_json)")
+    con.execute("CREATE TABLE shearwater_samples (source_dive_id, t_s, depth_m, o2_pct, he_pct, avg_ppo2, gf99)")
+    con.execute("CREATE TABLE undecoded_payloads (source_dive_id, container, type_key, seq, payload)")
+    start = 1_760_000_000
+    header = {"pnf": {"start_time": start, "atmospheric_mbar": 1013, "water_density": 1030, "deco_model": "gf",
+                      "gf_low": 50, "gf_high": 80}}
+    con.execute("INSERT INTO source_dives VALUES (1, '2025-10-01 10:00:00', 'oc_rec', ?)", (json.dumps(header),))
+    for t in range(0, 601, 10):
+        con.execute("INSERT INTO shearwater_samples VALUES (1, ?, 20.0, 21, 0, NULL, NULL)", (t,))
+    surface = [(1.013 - 0.0627) * 0.7902] * 16
+    _snapshot_rows(con, 1, 0, start, surface, [0.0] * 16)
+    # The computer's second snapshot, at 240 s, says something the model wouldn't.
+    _snapshot_rows(con, 1, 100, start + 240, [2.0] * 16, [0.5] * 16)
+    con.commit()
+    con.close()
+
+    out = tissues(db, 1)
+    at_240 = 24
+    assert out["n2"][at_240] == [2.0] * 16 and out["he"][at_240] == [0.5] * 16
+    assert out["snapshots_s"] == [0, 240]
+    assert out["drift_checks"] == 1 and out["drift_bar"] > 0.4  # the model hadn't put any helium in
+    # It carries on from the snapshot: on air at 20 m the helium it was given
+    # washes out, and nitrogen keeps rising toward the inspired 2.34 bar.
+    assert 0 < out["he"][-1][0] < 0.5
+    assert 2.0 < out["n2"][-1][0] < 2.35
+    assert len(out["gf"]) == len(out["p_amb"]) == 61

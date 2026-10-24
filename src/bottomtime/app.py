@@ -35,7 +35,7 @@ from pathlib import Path
 
 from . import __version__
 from .api import compare_logs, computers, dive_summaries, load_dive, write_dive_csv
-from .deco import surface_gf
+from .deco import ZHL16C, surface_gf, tissues
 from .store import db as store_db
 
 UI = Path(__file__).parent / "app_ui" / "index.html"
@@ -664,7 +664,13 @@ def dive_chart(db: Path, dive_id: int) -> dict:
         calculated = [surface_gf(db, log["source_dive_id"]) for log in group] if source == "shearwater" else []
         if any(calculated):
             channels["surfgf"] = None
+        # The tissue loadings a Shearwater wrote about every four minutes, with
+        # the model between them, for the tissue chart.
+        tissue = [tissues(db, log["source_dive_id"]) for log in group] if source == "shearwater" else []
+        has_tissues = any(tissue)
         series = {"t": [], **{name: [] for name in channels}}
+        if has_tissues:
+            series.update(tn2=[], the=[], tgf=[], pamb=[])
         for k, log in enumerate(group):
             samples = log["samples"]
             t = [round(log["offset_s"] + x, 1) for x in samples["t_s"]]
@@ -672,6 +678,13 @@ def dive_chart(db: Path, dive_id: int) -> dict:
                 series["t"].append(round((series["t"][-1] + t[0]) / 2, 1))
                 for name in channels:
                     series[name].append(None)
+                if has_tissues:
+                    for name in ("tn2", "the", "tgf", "pamb"):
+                        series[name].append(None)
+            if has_tissues:
+                tk = tissue[k]
+                for name, key in (("tn2", "n2"), ("the", "he"), ("tgf", "gf"), ("pamb", "p_amb")):
+                    series[name] += tk[key] if tk else [None] * len(t)
             series["t"] += t
             for name, column in channels.items():
                 if name == "surfgf":
@@ -701,6 +714,15 @@ def dive_chart(db: Path, dive_id: int) -> dict:
                 "series": series,
                 # How far the model's GF99 was from the logged GF99, in points.
                 "surfgf_check": max((c["gf99_gap"] for c in calculated if c and c["gf99_gap"] is not None), default=None),
+                # Where the computer's snapshots are, and how far the model
+                # drifted from them between snapshots, in bar.
+                "tissues": {
+                    "snapshots": [round(log["offset_s"] + a, 1) for log, tk in zip(group, tissue) if tk for a in tk["snapshots_s"]],
+                    "drift_bar": max((tk["drift_bar"] for tk in tissue if tk and tk["drift_bar"] is not None), default=None),
+                    "checks": sum(tk["drift_checks"] for tk in tissue if tk),
+                    "gf_low": next((tk["gf_low"] for tk in tissue if tk), None),
+                    "gf_high": next((tk["gf_high"] for tk in tissue if tk), None),
+                } if has_tissues else None,
             }
         )
     return {
@@ -715,6 +737,7 @@ def dive_chart(db: Path, dive_id: int) -> dict:
         "logs": logs,
         "matches": dive["matches"],
         "compare": compare_logs(dive),
+        "zhl16c": ZHL16C,
     }
 
 

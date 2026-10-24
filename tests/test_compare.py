@@ -54,3 +54,27 @@ def test_a_computer_split_into_several_logs_is_one_computer():
     assert [(r["computer"], r["logs"]) for r in c["logs"]] == [("Descent Mk3", 1), ("Perdix 2", 2)]
     assert c["logs"][1]["duration_s"] == 2 * 290
     assert len(c["depth"]) == 1
+
+
+def test_a_water_setting_leaves_no_spread_but_different_depths_do():
+    profile = [min(i, 30) for i in range(120)]
+    perdix = _log("Perdix 2", 1020, profile, 10)
+    lighter = _log("Descent Mk3", 1000, [d * 1.02 for d in profile], 10, source="garmin")
+    gap = compare_logs({"sources": {"shearwater": [perdix], "garmin": [lighter]}})["depth"][0]
+    assert gap["spread_m"] < 0.05  # the setting scales every reading the same way
+    # Same setting, but the second computer wanders up to 2 m above and below.
+    wandering = _log("Descent Mk3", 1020, [d + (2 if (i // 5) % 2 else -2) * (d > 5) for i, d in enumerate(profile)], 10,
+                     source="garmin")
+    gap = compare_logs({"sources": {"shearwater": [perdix], "garmin": [wandering]}})["depth"][0]
+    assert gap["spread_m"] > 2 and gap["max_m"] >= 2
+
+
+def test_a_split_log_says_where_the_other_computer_was_during_the_breaks():
+    first = _log("Perdix 2", 1020, [5.0] * 30, 10)
+    second = _log("Perdix 2", 1020, [5.0] * 30, 10, offset_s=500)
+    # The Descent stayed at 1.5 m while the Perdix wasn't logging.
+    descent = _log("Descent Mk3", 1000, [5.0 if t < 290 or t > 500 else 1.5 for t in range(0, 800, 10)], 10,
+                   source="garmin")
+    c = compare_logs({"sources": {"garmin": [descent], "shearwater": [first, second]}})
+    assert c["splits"] == [{"computer": 1, "breaks": 1, "others": [{"computer": 0, "median_m": 1.5, "max_m": 1.5}]}]
+    assert c["logs"][1]["source"] == "shearwater"

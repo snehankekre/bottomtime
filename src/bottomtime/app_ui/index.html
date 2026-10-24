@@ -20,6 +20,13 @@
     --series-1: #2a78d6;
     --series-2: #eb6834;
     --series-3: #1baf7a;
+    --n2: #5f7d9e;
+    --he: #d98a3a;
+    --t-cool: #3f7fd0;
+    --t-warm-1: #f1c453;
+    --t-warm-2: #ea6a30;
+    --t-hot: #c8302f;
+    --t-over: #6d1230;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
@@ -38,6 +45,13 @@
       --series-1: #3987e5;
       --series-2: #d95926;
       --series-3: #199e70;
+      --n2: #8ea8c6;
+      --he: #e39b52;
+      --t-cool: #4b8de0;
+      --t-warm-1: #d9ad3c;
+      --t-warm-2: #e0672d;
+      --t-hot: #e04848;
+      --t-over: #f08aa6;
     }
   }
   * { box-sizing: border-box; }
@@ -136,6 +150,16 @@
   .compare td:first-child { color: var(--text-muted); }
   .compare tr.differs td:not(:first-child) { font-weight: 600; }
   .note { font-size: 12px; color: var(--text-muted); margin: 8px 0 0; }
+  .chart-row { display: flex; gap: 18px; align-items: flex-start; }
+  .chart-row .panels { flex: 1; min-width: 0; }
+  .tissue-side { flex: none; width: 300px; position: sticky; top: 64px; font-size: 12px; }
+  .tissue-side .head { font-size: 13px; font-weight: 600; margin: 0 0 2px; }
+  .tissue-side .lead { color: var(--text-secondary); margin: 0 0 8px; min-height: 2.9em; }
+  .tissue-side .keys { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--text-secondary); margin: 6px 0 8px; }
+  .tissue-side .keys span { display: inline-flex; align-items: center; gap: 5px; }
+  .tissue-side .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+  .tissue-side .about { color: var(--text-muted); margin: 0; }
+  @media (max-width: 960px) { .chart-row { flex-direction: column; } .tissue-side { width: 100%; position: static; } }
 
   .tip { position: fixed; pointer-events: none; z-index: 20; background: var(--surface-1); border: 1px solid var(--hairline);
     border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.12); min-width: 180px; }
@@ -206,7 +230,7 @@
 <main>
   <section id="empty" class="empty card" hidden>
     <h1>Your dives, from every computer, on one timeline</h1>
-    <p>bottomtime reads the logs your dive computers already keep, lines up the ones that recorded the same dive, and keeps every channel they recorded, including GF99 and the deco ceiling that Shearwater's own exports leave out.</p>
+    <p>bottomtime reads the logs your dive computers already keep, lines up the ones that recorded the same dive, and keeps every channel they recorded, including GF99 and the deco ceiling that Shearwater's exports leave out.</p>
     <div class="step"><div class="n">1</div><div>
       <h2>Shearwater</h2>
       <p id="empty-cloud"></p>
@@ -260,7 +284,10 @@
     <div class="card">
       <div class="legend" id="d-legend"></div>
       <div class="legend" id="d-charts"></div>
-      <div class="panels" id="panels" tabindex="0" aria-label="Dive charts. Use the left and right arrow keys to move through the dive."></div>
+      <div class="chart-row">
+        <div class="panels" id="panels" tabindex="0" aria-label="Dive charts. Use the left and right arrow keys to move through the dive."></div>
+        <aside class="tissue-side" id="tissue-side" aria-live="polite" hidden></aside>
+      </div>
       <p class="note" id="d-note"></p>
     </div>
   </section>
@@ -341,7 +368,7 @@
   <div class="help-top"><button id="help-tour">Show me around</button><button id="help-manual">Open the full manual</button></div>
   <div class="help-body">
     <h3>Getting your dives in</h3>
-    <p><b>Shearwater.</b> bottomtime reads Shearwater Cloud's own database on this computer, so there is nothing to export. Open Shearwater Cloud first and make sure it shows your latest dives, then click Read Shearwater Cloud. If Shearwater Cloud isn't on this computer, export a database from it on another computer (File → Export → Export Database) and add the .db file.</p>
+    <p><b>Shearwater.</b> bottomtime reads Shearwater Cloud's database on this computer, so there is nothing to export. Open Shearwater Cloud first and make sure it shows your latest dives, then click Read Shearwater Cloud. If Shearwater Cloud isn't on this computer, export a database from it on another computer (File → Export → Export Database) and add the .db file.</p>
     <p><b>Garmin.</b> Sign in to Garmin Connect once. bottomtime downloads the original file of every dive your watch synced, and after that only the new ones. Dives that were uploaded to Garmin Connect from another brand's computer are skipped, because bottomtime reads those computers directly and gets more from them.</p>
     <p><b>Files.</b> Add files… takes .fit files from a Garmin and .db files exported from Shearwater Cloud.</p>
     <p>Reading the same dives twice is harmless: bottomtime recognises dives it already has. Settings can make it look for new dives each time it opens.</p>
@@ -363,6 +390,7 @@
 
     <h3>Reading a dive</h3>
     <p>Each computer gets its own colour. The solid line is depth, and the dashed line in the same colour is the deco ceiling the Shearwater calculated. Below are GF99 and ppO2 on the same time axis. Tick the boxes under the legend to chart anything else the computers recorded, such as time to surface, CNS, or temperature. Move the pointer over the charts, or use the arrow keys, to read every computer at the same moment.</p>
+    <p>Tick Tissues to see your Shearwater's decompression model through the dive. A Shearwater writes the nitrogen and helium in all 16 of its tissue compartments into the log about every four minutes, and bottomtime fills the gaps with the same Bühlmann ZHL-16C model, starting again from each snapshot. The heatmap shows every compartment over time, fastest at the top, blue while it is still taking on gas and red as it nears its M-value. Beside the charts, bars show one moment: nitrogen and helium in each compartment, its M-value, the limit your gradient factors set, and the water pressure around you. Move the pointer to scrub through the dive.</p>
     <p>No two dive computers' clocks agree. bottomtime takes the time zone from the Garmin, then slides one depth profile against the other until they match best. The seconds left over are shown under the chart. Neither log is changed, merged, or resampled.</p>
     <p>When two computers logged the dive, How the computers compared says how far apart their depths were below 5 m, and how much of that their water density settings explain. A computer set to lighter water reads deeper: fresh water (1000 kg/m³) reads 2% deeper than EN13319 (1020). Shearwater's "salt" is 1030 kg/m³ and Garmin's is 1025. Below that, a table puts each computer's settings, required stops, and CNS side by side, with the values that differ in bold.</p>
 
@@ -370,6 +398,8 @@
     <dl>
       <dt>GF99</dt><dd>How close your leading tissue is to its Bühlmann limit at your current depth, as a percentage. 100 means you are at the limit.</dd>
       <dt>Ceiling</dt><dd>The shallowest depth the computer would let you ascend to right now.</dd>
+      <dt>Tissue compartment</dt><dd>One of the 16 model tissues the Bühlmann model tracks, from compartment 1, which takes on and gives off gas in minutes, to compartment 16, which takes hours.</dd>
+      <dt>M-value</dt><dd>The most inert gas a compartment can hold at the current depth before the model expects bubbles. Gradient factors set a limit below it.</dd>
       <dt>@+5</dt><dd>What your time to surface would be if you stayed five more minutes at this depth.</dd>
       <dt>TTS</dt><dd>Time to surface, including every stop.</dd>
       <dt>NDL</dt><dd>No-decompression limit: minutes left before you'd need a stop.</dd>
@@ -720,7 +750,7 @@ function renderDive() {
   });
   const m = d.matches;
   $("d-note").textContent = m.length
-    ? "Lined up from the logs' own clocks, then by matching the depth profiles: " + m.map((x) => `${x.residual_skew_s >= 0 ? "+" : ""}${x.residual_skew_s} s left over, profile match ${num(x.xcorr_score, 3)}`).join("; ") + ". Neither log is changed or resampled."
+    ? "Lined up from the logs' clocks, then by matching the depth profiles: " + m.map((x) => `${x.residual_skew_s >= 0 ? "+" : ""}${x.residual_skew_s} s left over, profile match ${num(x.xcorr_score, 3)}`).join("; ") + ". Neither log is changed or resampled."
     : d.logs.length > 1 ? "" : "Recorded by one computer.";
   renderCompare();
   renderPanels();
@@ -754,7 +784,19 @@ function renderCompare() {
       t += Math.abs(rest) < 0.25 ? " That accounts for the difference." : ` That leaves ${pct(rest)} the settings don't explain.`;
     }
     say(t);
+    if (g.spread_m != null && g.spread_m >= 0.6) {
+      say(`Their depths didn't track each other. With the median difference taken out, the gap still moved over ${fmtDepth(g.spread_m)} across the middle half of the readings and reached ${fmtDepth(g.max_m)}. A water setting changes every reading by the same share, so it can't do that. The computers were at different depths for parts of the dive, for example on different arms in a cave or a swim-through.`);
+    }
   });
+  for (const sp of c.splits || []) {
+    const a = L[sp.computer];
+    for (const o of sp.others) {
+      if (o.median_m < 0.5) continue;
+      let t = `The ${a.computer} ended the dive ${sp.breaks === 1 ? "once" : sp.breaks + " times"} and started a new log after ${sp.breaks === 1 ? "it" : "each"}. While it wasn't logging, the ${L[o.computer].computer} was still underwater, at a median ${fmtDepth(o.median_m)} and at most ${fmtDepth(o.max_m)}.`;
+      if (a.source === "shearwater") t += " A Shearwater ends a dive once it has been at the surface for its End Dive Delay, 60 seconds unless changed, so shallows or an air pocket can end it. Raising End Dive Delay in System Setup, Adv. Config (up to 600 seconds) keeps a dive like this in one log.";
+      say(t);
+    }
+  }
   for (const b of L.slice(1)) {
     const a = L[0], x = Math.round(a.deco_min), y = Math.round(b.deco_min);
     if (!x && !y) continue;
@@ -801,6 +843,10 @@ const PANELS = [
     return "Surface GF (%), calculated by bottomtime, since computers don't record it." +
       (c.length ? ` Its GF99 on this dive was within a median ${num(Math.max(...c), 1)} points of the Shearwater's.` : "");
   }, lines: [["surfgf", false]], height: 150},
+  {key: "tissues", name: "Tissues", kind: "tissues", label: (d) => {
+    const l = tissueLogs(d)[0];
+    return `Tissues, fastest at the top. Ticks mark the ${l.computer}'s snapshots.`;
+  }, lines: [["tgf", false]], height: 0},
   {key: "ppo2", name: "ppO2", label: () => "ppO2", lines: [["ppo2", false]], height: 150},
   {key: "tts", name: "Time to surface", label: () => "Time to surface (min), with @+5 dashed", lines: [["tts", false], ["at5", true]], height: 150},
   {key: "stop", name: "Next stop", label: () => `Next stop (${depthUnit()})`, down: true, lines: [["stop", false]], height: 120},
@@ -844,6 +890,9 @@ function renderPanels() {
   });
   const all = d.logs.flatMap((l) => l.series.t);
   const t0 = Math.min(...all), t1 = Math.max(...all);
+  const tlog = tissueLogs(d)[0];
+  const tissueOn = !!tlog && (settings().charts || []).includes("tissues");
+  $("tissue-side").hidden = !tissueOn;
   const W = box.clientWidth || 900, L = 52, R = 16;
   const sx = scale(t0, t1, L, W - R);
   const recorded = PANELS.filter((p) => d.logs.some((l) => p.lines.some(([ch]) => l.series[ch])));
@@ -863,9 +912,23 @@ function renderPanels() {
   }
   const visible = recorded.filter((p) => p.key === "depth" || chosen.includes(p.key));
   const cross = [];
+  const timeAxis = (svg, H) => {
+    const span = (t1 - t0) / 60;
+    for (const v of ticks(0, span, Math.floor((W - L) / 80))) {
+      el("text", {x: sx(t0 + v * 60), y: H - 8, "text-anchor": "middle"}, svg).textContent = v + (v === 0 ? " min" : "");
+    }
+  };
   visible.forEach((p, pi) => {
-    const last = pi === visible.length - 1, H = p.height + (last ? 26 : 0), B = last ? 26 : 6, T = 22;
+    const last = pi === visible.length - 1, B = last ? 26 : 6, T = 22;
+    const H = (p.kind === "tissues" ? tissueHeight(d) : p.height) + (last ? 26 : 0);
     const svg = el("svg", {width: "100%", height: H, role: "img", "aria-label": p.label(d)}, box);
+    if (p.kind === "tissues") {
+      drawTissues(svg, d, sx, L, W - R, T);
+      el("text", {x: L, y: 12}, svg).textContent = p.label(d);
+      if (last) timeAxis(svg, H);
+      cross.push(el("line", {y1: T, y2: H - B, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden"}, svg));
+      return;
+    }
     let hi = 0;
     for (const l of d.logs) for (const [ch] of p.lines) for (const v of l.series[ch] || []) { const x = value(ch, v); if (x != null && x > hi) hi = x; }
     hi = hi * 1.05 || 1;
@@ -891,12 +954,7 @@ function renderPanels() {
           "stroke-dasharray": dash ? "5 4" : "none", "stroke-linejoin": "round"}, svg);
       }
     });
-    if (last) {
-      const span = (t1 - t0) / 60;
-      for (const v of ticks(0, span, Math.floor((W - L) / 80))) {
-        el("text", {x: sx(t0 + v * 60), y: H - 8, "text-anchor": "middle"}, svg).textContent = v + (v === 0 ? " min" : "");
-      }
-    }
+    if (last) timeAxis(svg, H);
     cross.push(el("line", {y1: T, y2: H - B, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden"}, svg));
   });
 
@@ -919,23 +977,143 @@ function renderPanels() {
         if (v == null) continue;
         rows.push([ch === "depth" || ch === "ceiling" ? color(i) : null, LABELS[ch], shown(ch, v), ch === "ceiling"]);
       }
+      const g = j >= 0 && log.series.tgf && log.series.tgf[j];
+      if (g) { const k = leading(g); rows.push([null, "leading tissue", `${k + 1}, at ${num(g[k])}%`]); }
       if (!rows.length) rows.push([null, "not recording", ""]);
       return {who: log.computer, rows};
     });
+    if (tissueOn) { const j = at(tlog, cursor); if (j >= 0 && tlog.series.tgf[j]) drawBars(d, tlog, j, false); }
     const r = box.getBoundingClientRect();
     const ev = e || {clientX: r.left + sx(cursor), clientY: r.top + 40};
     showTip(ev, `${fmtDur(cursor - t0)} into the dive`, groups);
   };
   const toT = (e) => { const r = box.getBoundingClientRect(); return t0 + ((e.clientX - r.left - L) / (W - L - R)) * (t1 - t0); };
   box.onpointermove = (e) => show(toT(e), e);
-  box.onpointerleave = () => { hideTip(); for (const c of cross) c.setAttribute("visibility", "hidden"); };
+  const rest = () => { if (tissueOn) drawBars(d, tlog, peakIndex(tlog), true); };
+  rest();
+  box.onpointerleave = () => { hideTip(); for (const c of cross) c.setAttribute("visibility", "hidden"); rest(); };
   box.onkeydown = (e) => {
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     e.preventDefault();
     show((cursor ?? t0) + (e.key === "ArrowRight" ? 1 : -1) * (e.shiftKey ? 60 : 10));
   };
-  box.onblur = () => hideTip();
+  box.onblur = () => { hideTip(); rest(); };
 }
+
+// ---- tissues ----
+// The Shearwater writes all 16 compartments into its log about every four
+// minutes, and bottomtime's ZHL-16C fills the gaps, starting again from each
+// snapshot. The heatmap shows every compartment through the dive, and the
+// bars beside the charts show one moment, like the computer's tissue screen.
+const TISSUE_ROW = 7;
+const tissueLogs = (d) => d.logs.filter((l) => l.series.tgf && l.tissues);
+const tissueBlock = (d) => 16 * TISSUE_ROW + (tissueLogs(d).length > 1 ? 30 : 16);
+const tissueHeight = (d) => 22 + tissueLogs(d).length * tissueBlock(d);
+const cssVar = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const rgb = (c) => { const m = c.replace("#", ""); return [0, 2, 4].map((i) => parseInt(m.slice(i, i + 2), 16)); };
+const mixRgb = (a, b, t) => a.map((x, i) => Math.round(x + (b[i] - x) * t));
+const leading = (g) => g.reduce((best, v, k) => (v > g[best] ? k : best), 0);
+function tissueColor() {
+  const base = rgb(cssVar("--surface-2")), cool = rgb(cssVar("--t-cool")), over = rgb(cssVar("--t-over"));
+  const warm = [base, rgb(cssVar("--t-warm-1")), rgb(cssVar("--t-warm-2")), rgb(cssVar("--t-hot"))];
+  return (v) => {
+    // Below 0 the compartment is still taking on gas; 100 is its M-value.
+    if (v <= 0) return mixRgb(base, cool, Math.min(1, -v / 100) * 0.85);
+    if (v >= 100) return mixRgb(warm[3], over, Math.min(1, (v - 100) / 50));
+    const x = (v / 100) * 3, k = Math.min(2, Math.floor(x));
+    return mixRgb(warm[k], warm[k + 1], x - k);
+  };
+}
+function drawTissues(svg, d, sx, x0, x1, top) {
+  const paint = tissueColor(), dpr = window.devicePixelRatio || 1, logs = tissueLogs(d);
+  const defs = el("defs", {}, svg), grad = el("linearGradient", {id: "tissue-key"}, defs);
+  [-100, -50, 0, 33, 67, 100].forEach((v) => el("stop", {offset: `${(v + 100) / 2}%`, "stop-color": `rgb(${paint(v)})`}, grad));
+  const kx = x1 - 150;
+  el("text", {x: kx - 6, y: 12, "text-anchor": "end"}, svg).textContent = "taking on gas";
+  el("rect", {x: kx, y: 4, width: 100, height: 9, rx: 2, fill: "url(#tissue-key)"}, svg);
+  el("text", {x: kx + 50, y: 12, "text-anchor": "middle", style: "font-size:9px"}, svg).textContent = "0";
+  el("text", {x: kx + 106, y: 12}, svg).textContent = "M-value";
+  logs.forEach((log, b) => {
+    const y0 = top + b * tissueBlock(d) + (logs.length > 1 ? 14 : 4), h = 16 * TISSUE_ROW;
+    if (logs.length > 1) el("text", {x: x0, y: y0 - 4}, svg).textContent = log.computer;
+    const cv = document.createElement("canvas");
+    cv.width = Math.max(1, Math.round((x1 - x0) * dpr)); cv.height = Math.round(h * dpr);
+    const g = cv.getContext("2d"), ts = log.series.t, gf = log.series.tgf;
+    for (let j = 0; j < ts.length; j++) {
+      if (!gf[j]) continue;
+      const next = j + 1 < ts.length && gf[j + 1] ? ts[j + 1] : ts[j] + 10;
+      const a = (sx(ts[j]) - x0) * dpr, w = (sx(next) - sx(ts[j])) * dpr;
+      for (let k = 0; k < 16; k++) {
+        g.fillStyle = `rgb(${paint(gf[j][k])})`;
+        g.fillRect(Math.floor(a), Math.round(k * TISSUE_ROW * dpr), Math.ceil(w) + 1, Math.ceil(TISSUE_ROW * dpr));
+      }
+    }
+    el("image", {href: cv.toDataURL(), x: x0, y: y0, width: x1 - x0, height: h, preserveAspectRatio: "none"}, svg);
+    for (const k of [0, 7, 15]) el("text", {x: x0 - 6, y: y0 + k * TISSUE_ROW + TISSUE_ROW, "text-anchor": "end", style: "font-size:9px"}, svg).textContent = k + 1;
+    for (const t of log.tissues.snapshots) {
+      el("path", {d: `M${sx(t).toFixed(1)} ${y0 + h + 1}l-3 5h6z`, fill: "var(--text-muted)"}, svg);
+    }
+  });
+}
+function peakIndex(log) {
+  let best = -1, at = 0;
+  log.series.tgf.forEach((g, j) => { if (g) { const v = Math.max(...g); if (v > best) { best = v; at = j; } } });
+  return at;
+}
+function mValues(d, n2, he, pa) {
+  const Z = d.zhl16c;
+  return n2.map((x, k) => {
+    const pt = x + he[k], a = (Z.n2[k][0] * x + Z.he[k][0] * he[k]) / pt, b = (Z.n2[k][1] * x + Z.he[k][1] * he[k]) / pt;
+    return a + pa / b;
+  });
+}
+function drawBars(d, log, j, atPeak) {
+  const side = $("tissue-side"), s = log.series, info = log.tissues;
+  const n2 = s.tn2[j], he = s.the[j], pa = s.pamb[j], gf = s.tgf[j], m = mValues(d, n2, he, pa);
+  const k = leading(gf), gfh = info.gf_high, when = fmtDur(s.t[j] - Math.min(...d.logs.flatMap((l) => l.series.t)));
+  side.textContent = "";
+  const p = (cls, text) => { const x = document.createElement("p"); x.className = cls; x.textContent = text; side.append(x); return x; };
+  p("head", atPeak ? `Tissues at ${when}, the closest they came to a limit` : `Tissues at ${when}` + (s.depth && s.depth[j] != null ? `, ${fmtDepth(s.depth[j])}` : ""));
+  const half = d.zhl16c.half_times.n2[k];
+  p("lead", gf[k] > 0
+    ? `Compartment ${k + 1} (${half} min) leads, at ${num(gf[k])}% of the way from ambient pressure to its M-value.`
+    : `Every compartment is still taking on gas. Compartment ${k + 1} is closest to ambient pressure.`);
+  // Each bar is scaled to its own M-value, the way the computer draws its
+  // tissue screen, so the bars stay readable from 100 m to the surface.
+  const W = 300, H = 200, L = 34, R = 4, T = 8, B = 20, band = (W - L - R) / 16;
+  const svg = el("svg", {width: W, height: H, role: "img", "aria-label": `Tissue loadings at ${when}`}, side);
+  const sy = scale(0, 1.12, H - B, T);
+  const grid = el("g", {class: "grid"}, svg);
+  for (const v of [0, 0.5, 1]) {
+    el("line", {x1: L, x2: W - R, y1: sy(v), y2: sy(v)}, grid);
+    el("text", {x: L - 4, y: sy(v) + 4, "text-anchor": "end"}, svg).textContent = v * 100 + "%";
+  }
+  el("line", {x1: L, x2: W - R, y1: sy(1), y2: sy(1), stroke: "var(--critical)", "stroke-width": 1.5}, svg);
+  for (let c = 0; c < 16; c++) {
+    const x = L + c * band + band * 0.16, w = band * 0.68, fn = Math.min(n2[c] / m[c], 1.12), fh = Math.min(he[c] / m[c], 1.12 - fn);
+    el("rect", {x, y: sy(fn), width: w, height: sy(0) - sy(fn), fill: "var(--n2)"}, svg);
+    if (fh > 0.002) el("rect", {x, y: sy(fn + fh), width: w, height: sy(fn) - sy(fn + fh), fill: "var(--he)"}, svg);
+    el("line", {x1: x - 1, x2: x + w + 1, y1: sy(pa / m[c]), y2: sy(pa / m[c]), stroke: "var(--text-primary)", "stroke-width": 1.5}, svg);
+    if (gfh) {
+      const lim = (pa + (gfh / 100) * (m[c] - pa)) / m[c];
+      el("line", {x1: x - 1, x2: x + w + 1, y1: sy(lim), y2: sy(lim), stroke: "var(--text-primary)", "stroke-width": 1.2, "stroke-dasharray": "2 2"}, svg);
+    }
+    if (c === k && gf[k] > 0) el("rect", {x: x - 2, y: T - 2, width: w + 4, height: sy(0) - T + 2, fill: "none", stroke: "var(--text-secondary)", "stroke-width": 1, rx: 2}, svg);
+    if ([0, 3, 7, 11, 15].includes(c)) el("text", {x: x + w / 2, y: H - 6, "text-anchor": "middle"}, svg).textContent = c + 1;
+  }
+  const keys = document.createElement("div"); keys.className = "keys"; side.append(keys);
+  const key = (style, text) => { const x = document.createElement("span"), sw = document.createElement("span"); sw.className = "sw"; Object.assign(sw.style, style); x.append(sw, text); keys.append(x); };
+  key({background: "var(--n2)"}, "nitrogen");
+  key({background: "var(--he)"}, "helium");
+  key({height: "0", borderTop: "2px solid var(--text-primary)", borderRadius: "0"}, "ambient");
+  if (gfh) key({height: "0", borderTop: "1.5px dashed var(--text-primary)", borderRadius: "0"}, `GF ${gfh} limit`);
+  key({height: "0", borderTop: "2px solid var(--critical)", borderRadius: "0"}, "M-value");
+  p("about", `Each bar is one compartment's nitrogen and helium as a share of its M-value, fastest on the left. A bar above its ambient mark is giving off gas. ` +
+    `The values come from the tissue loadings the ${log.computer} wrote into its log every 4 minutes, with bottomtime's ZHL-16C in between.` +
+    (info.drift_bar != null ? ` Between snapshots the model stayed within a median ${num(info.drift_bar, 3)} bar of them.` : "") +
+    " Move the pointer over the charts to see any moment.");
+}
+
 
 function backToList() { if (touring) endTour(); $("detail").hidden = true; current = null; hideTip(); refresh(); }
 

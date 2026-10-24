@@ -40,7 +40,7 @@ bottomtime keeps everything:
 - **Decodes Shearwater's Petrel Native Format** directly from a Shearwater
   Cloud database (`dive_data.db`, the "Export Database" output) with
   [pnf](https://github.com/snehankekre/pnf), including per-sample **GF99, deco
-  ceiling, @+5 and battery voltage** that Shearwater's own XML/CSV exports
+  ceiling, @+5 and battery voltage** that Shearwater's XML/CSV exports
   omit. Unknown record types are preserved raw.
 - **Archives every source file verbatim**, content-addressed by SHA-256. The
   database is a decoded view; the archive is the source of truth.
@@ -49,7 +49,7 @@ bottomtime keeps everything:
   clock offset and residual skew) without ever merging or resampling the
   original series.
 - **Verifies itself**: the decoder is cross-checked per-sample against
-  Shearwater XML exports, against Shearwater Cloud's own computed values
+  Shearwater XML exports, against Shearwater Cloud's computed values
   (EndGF99), and matched dives are checked for depth agreement.
 - **Rebuilds from the archive**: the database is disposable, and
   `bottomtime rebuild` recreates it from the archived files.
@@ -85,7 +85,10 @@ The app lists every dive with its runtime, max depth, deco time, GF99, and
 CNS, sorts and filters them, and charts any of those across your dives. Open a
 dive and every computer you wore is on one timeline: depth, the Shearwater's
 deco ceiling, GF99, and ppO2, with a readout of each computer at the same
-moment. When two computers logged a dive, the app says how far apart their
+moment. For a Shearwater it also shows all 16 tissue compartments through the
+dive, from the tissue loadings the computer writes into its log every four
+minutes, with bars beside the charts that follow the pointer. When two
+computers logged a dive, the app says how far apart their
 depths were and how much of that their water density settings explain, and
 puts their settings, deco, and CNS side by side. **Export all** saves every
 dive as CSV in a zip file, so your data stays readable without bottomtime or
@@ -207,7 +210,7 @@ Decoding lives in [pnf](https://github.com/snehankekre/pnf), and its
 [SPEC.md](https://github.com/snehankekre/pnf/blob/main/SPEC.md) documents
 every byte of the sample record. The mappings for GF99 (byte 25), deco ceiling
 (byte 24), battery voltage (bytes 17-18) and @+5 TTS (bytes 26-27) were found
-by experiment, then confirmed against Shearwater Cloud's own parser.
+by experiment, then confirmed against Shearwater Cloud's parser.
 `bottomtime verify` finds the decoded values identical to Shearwater's XML
 export on all 142 dives I exported, and GF99 within one point of Cloud's
 EndGF99 on all 144. If your dives

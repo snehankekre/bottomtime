@@ -57,6 +57,26 @@ def _gf(pn: list[float], ph: list[float], p_amb: float) -> float:
     return worst
 
 
+def _pressure(p_surf: float, rho: float, depth_m) -> float:
+    return p_surf + (depth_m or 0) * rho * 9.80665 / 1e5
+
+
+def _inspired(p_mid: float, o2, he, ppo2, cc: bool) -> tuple[float, float]:
+    """Inspired nitrogen and helium pressures in bar."""
+    fn2, fhe = 1 - (o2 or 21) / 100 - (he or 0) / 100, (he or 0) / 100
+    if cc and ppo2:
+        # The loop holds ppO2, and the diluent's inert gases share the rest.
+        inert = max(p_mid - WATER_VAPOUR_BAR - ppo2, 0)
+        return inert * fn2 / (fn2 + fhe), inert * fhe / (fn2 + fhe)
+    return (p_mid - WATER_VAPOUR_BAR) * fn2, (p_mid - WATER_VAPOUR_BAR) * fhe
+
+
+def _load(pn: list[float], ph: list[float], in_n2: float, in_he: float, minutes: float) -> None:
+    for i in range(16):
+        pn[i] += (in_n2 - pn[i]) * (1 - 2 ** (-minutes / N2[i][0]))
+        ph[i] += (in_he - ph[i]) * (1 - 2 ** (-minutes / HE[i][0]))
+
+
 def _run(log: dict, state):
     """Load tissues through one log. Returns the end state and, per sample,
     (model GF99, model surface GF)."""
@@ -67,42 +87,46 @@ def _run(log: dict, state):
     cc = log["mode"] == "cc"
     out, prev = [], None
     for t, d, o2, he, ppo2 in zip(s["t_s"], s["depth_m"], s["o2_pct"], s["he_pct"], s["avg_ppo2"]):
-        p = p_surf + (d or 0) * rho * 9.80665 / 1e5
+        p = _pressure(p_surf, rho, d)
         if prev is not None:
-            minutes, p_mid = (t - prev[0]) / 60, (p + prev[1]) / 2
-            fn2, fhe = 1 - (o2 or 21) / 100 - (he or 0) / 100, (he or 0) / 100
-            if cc and ppo2:
-                # The loop holds ppO2, and the diluent's inert gases share the rest.
-                inert = max(p_mid - WATER_VAPOUR_BAR - ppo2, 0)
-                in_n2, in_he = inert * fn2 / (fn2 + fhe), inert * fhe / (fn2 + fhe)
-            else:
-                in_n2, in_he = (p_mid - WATER_VAPOUR_BAR) * fn2, (p_mid - WATER_VAPOUR_BAR) * fhe
-            for i in range(16):
-                pn[i] += (in_n2 - pn[i]) * (1 - 2 ** (-minutes / N2[i][0]))
-                ph[i] += (in_he - ph[i]) * (1 - 2 ** (-minutes / HE[i][0]))
+            _load(pn, ph, *_inspired((p + prev[1]) / 2, o2, he, ppo2, cc), (t - prev[0]) / 60)
         prev = (t, p)
         out.append((_gf(pn, ph, p), _gf(pn, ph, p_surf)))
     return (pn, ph), out
 
 
-def first_snapshot(con: sqlite3.Connection, source_dive_id: int):
-    """The tissue state a Shearwater wrote before its first sample, as
-    (16 nitrogen, 16 helium) pressures in bar, or None. A snapshot is six
-    records, 0x70 to 0x75, holding little-endian floats from byte 4: seven in
-    each of the first five records and six in the last, whose last four bytes
-    are a big-endian timestamp. The first 16 floats are nitrogen and the next
-    16 helium. The nine after that aren't known yet."""
+SNAPSHOT_TYPES = ["0x70", "0x71", "0x72", "0x73", "0x74", "0x75"]
+
+
+def snapshots(con: sqlite3.Connection, source_dive_id: int) -> list[dict]:
+    """Every tissue state a Shearwater wrote into a log, in order. A snapshot
+    is six records, 0x70 to 0x75, holding little-endian floats from byte 4:
+    seven in each of the first five records and six in the last, whose last
+    four bytes are a big-endian timestamp on the log's start-time clock. The
+    first 16 floats are nitrogen pressures in bar and the next 16 helium. The
+    nine after that aren't known yet."""
     rows = con.execute(
         "SELECT type_key, payload FROM undecoded_payloads WHERE source_dive_id=? AND container='pnf_record'"
-        " AND type_key IN ('0x70','0x71','0x72','0x73','0x74','0x75') ORDER BY seq LIMIT 6",
+        " AND type_key IN ('0x70','0x71','0x72','0x73','0x74','0x75') ORDER BY seq",
         (source_dive_id,),
     ).fetchall()
-    if [k for k, _ in rows] != ["0x70", "0x71", "0x72", "0x73", "0x74", "0x75"]:
-        return None
-    values = []
-    for k, payload in rows:
-        values += struct.unpack("<6f" if k == "0x75" else "<7f", payload[4:28 if k == "0x75" else 32])
-    return values[0:16], values[16:32]
+    out = []
+    for i in range(0, len(rows) - 5, 6):
+        group = rows[i:i + 6]
+        if [k for k, _ in group] != SNAPSHOT_TYPES:
+            break
+        values = []
+        for k, payload in group:
+            values += struct.unpack("<6f" if k == "0x75" else "<7f", payload[4:28 if k == "0x75" else 32])
+        out.append({"ts": struct.unpack(">I", group[5][1][28:32])[0], "n2": values[0:16], "he": values[16:32]})
+    return out
+
+
+def first_snapshot(con: sqlite3.Connection, source_dive_id: int):
+    """The tissue state a Shearwater wrote before its first sample, as
+    (16 nitrogen, 16 helium) pressures in bar, or None."""
+    snaps = snapshots(con, source_dive_id)
+    return (snaps[0]["n2"], snaps[0]["he"]) if snaps else None
 
 
 def _log(con: sqlite3.Connection, source_dive_id: int) -> dict:
@@ -165,3 +189,64 @@ def _result(out, log) -> dict:
         "gf99_gap": round(median(gaps), 1) if gaps else None,
         "gf99_readings": len(gaps),
     }
+
+
+def _compartment_gf(pn: float, ph: float, i: int, p_amb: float) -> float:
+    pt = pn + ph
+    a = (N2[i][1] * pn + HE[i][1] * ph) / pt
+    b = (N2[i][2] * pn + HE[i][2] * ph) / pt
+    m = a + p_amb / b
+    return (pt - p_amb) / (m - p_amb) * 100
+
+
+def tissues(db_path, source_dive_id: int) -> dict | None:
+    """The 16 nitrogen and 16 helium loadings at every sample of a Shearwater
+    log, from the snapshots the computer wrote about every four minutes. The
+    model fills the gaps between snapshots and starts again from each one, so
+    at every snapshot the values are the computer's. Each snapshot also
+    records how far the model had drifted from it, as a check on both.
+    None for a log without snapshots, or on a deco model other than GF."""
+    con = sqlite3.connect(db_path)
+    try:
+        log = _log(con, source_dive_id)
+        snaps = snapshots(con, source_dive_id)
+    finally:
+        con.close()
+    h, s = log["header"], log["samples"]
+    if not snaps or h.get("deco_model") not in (None, "gf") or h.get("start_time") is None or not s["t_s"]:
+        return None
+    p_surf = (h.get("atmospheric_mbar") or 1013) / 1000
+    rho = h.get("water_density") or 1030
+    cc = log["mode"] == "cc"
+    at = [snap["ts"] - h["start_time"] for snap in snaps]
+    pn, ph = list(snaps[0]["n2"]), list(snaps[0]["he"])
+    k, clock, drift = 1, at[0], []
+    out = {"n2": [], "he": [], "gf": [], "p_amb": []}
+    prev_p = _pressure(p_surf, rho, s["depth_m"][0])
+    for t, d, o2, he, ppo2 in zip(s["t_s"], s["depth_m"], s["o2_pct"], s["he_pct"], s["avg_ppo2"]):
+        p = _pressure(p_surf, rho, d)
+        inspired = _inspired((p + prev_p) / 2, o2, he, ppo2, cc)
+        while k < len(snaps) and at[k] <= t:
+            if at[k] > clock:
+                _load(pn, ph, *inspired, (at[k] - clock) / 60)
+            drift.append(max(abs(x - y) for x, y in zip(pn + ph, snaps[k]["n2"] + snaps[k]["he"])))
+            pn, ph = list(snaps[k]["n2"]), list(snaps[k]["he"])
+            clock, k = max(clock, at[k]), k + 1
+        if t > clock:
+            _load(pn, ph, *inspired, (t - clock) / 60)
+            clock = t
+        prev_p = p
+        out["n2"].append([round(v, 4) for v in pn])
+        out["he"].append([round(v, 4) for v in ph])
+        out["gf"].append([round(_compartment_gf(pn[i], ph[i], i, p), 1) for i in range(16)])
+        out["p_amb"].append(round(p, 4))
+    out["snapshots_s"] = [a for a in at if s["t_s"][0] <= a <= s["t_s"][-1] + 60]
+    out["drift_bar"] = round(median(drift), 4) if drift else None
+    out["drift_checks"] = len(drift)
+    out["gf_low"], out["gf_high"] = h.get("gf_low"), h.get("gf_high")
+    return out
+
+
+# For drawing M-values: (a, b) per compartment.
+ZHL16C = {"n2": [[a, b] for _, a, b in N2], "he": [[a, b] for _, a, b in HE],
+          "half_times": {"n2": [t for t, _, _ in N2], "he": [t for t, _, _ in HE]}}

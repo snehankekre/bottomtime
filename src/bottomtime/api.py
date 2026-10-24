@@ -64,29 +64,48 @@ def computer_info(source: str, header: dict) -> dict:
 # wrists stops dominating the percentage.
 GAP_MIN_DEPTH_M = 5.0
 GAP_MIN_READINGS = 20
+# 3 m a minute.
+STEADY_M_PER_S = 0.05
 
 
 def depth_gap(a: tuple[list, list], b: tuple[list, list]) -> dict | None:
     """How much deeper b read than a, as the median percentage over readings
     taken within a second and a half of each other. a and b are (times,
-    depths) on the dive's shared timeline, with times ascending."""
+    depths) on the dive's shared timeline, with times ascending.
+
+    Also how much the gap moved around once that percentage is taken out:
+    spread_m is the middle half of the leftover differences and max_m the
+    95th percentile of their size. A density setting scales every reading
+    the same way, so it leaves both small. Two computers that weren't at the
+    same depth, say on different arms in a cave, leave them large."""
     import bisect
-    from statistics import median
+    from statistics import median, quantiles
 
     a_t, a_d = a
-    ratios, diffs = [], []
+    pairs, steady = [], []
     for t, d in zip(*b):
         i = bisect.bisect_left(a_t, t - 1.5)
         if i < len(a_t) and abs(a_t[i] - t) <= 1.5 and d and a_d[i]:
             if d > GAP_MIN_DEPTH_M and a_d[i] > GAP_MIN_DEPTH_M:
-                ratios.append(d / a_d[i])
-                diffs.append(d - a_d[i])
-    if len(ratios) < GAP_MIN_READINGS:
+                pairs.append((a_d[i], d))
+                # While the diver is ascending or descending, a second of clock
+                # difference looks like a depth difference, so the spread only
+                # counts readings where the depth was nearly still.
+                lo, hi = max(i - 1, 0), min(i + 1, len(a_t) - 1)
+                if a_t[hi] > a_t[lo] and None not in (a_d[lo], a_d[hi]):
+                    if abs(a_d[hi] - a_d[lo]) / (a_t[hi] - a_t[lo]) <= STEADY_M_PER_S:
+                        steady.append((a_d[i], d))
+    if len(pairs) < GAP_MIN_READINGS:
         return None
+    ratio = median(d / ad for ad, d in pairs)
+    left = [d - ad * ratio for ad, d in (steady if len(steady) >= GAP_MIN_READINGS else pairs)]
+    q1, _, q3 = quantiles(left, n=4)
     return {
-        "pct": round((median(ratios) - 1) * 100, 2),
-        "m": round(median(diffs), 2),
-        "readings": len(ratios),
+        "pct": round((ratio - 1) * 100, 2),
+        "m": round(median(d - ad for ad, d in pairs), 2),
+        "readings": len(pairs),
+        "spread_m": round(q3 - q1, 2),
+        "max_m": round(sorted(abs(x) for x in left)[int(0.95 * (len(left) - 1))], 2),
     }
 
 
@@ -111,6 +130,7 @@ def compare_logs(dive: dict) -> dict | None:
             times += [log["offset_s"] + t for t in s["t_s"]]
             depths += s["depth_m"]
         rows.append({
+            "source": source,
             "computer": info["model"] or source,
             "logs": len(logs),
             "water_density": info["water_density"],
@@ -132,7 +152,33 @@ def compare_logs(dive: dict) -> dict | None:
             # Depth is pressure over density, so a lighter setting reads deeper.
             gap["settings_pct"] = round((ref / other - 1) * 100, 2)
         depth.append(gap)
-    return {"logs": rows, "depth": depth}
+    return {"logs": rows, "depth": depth, "splits": _splits(groups, series)}
+
+
+def _splits(groups, series) -> list[dict]:
+    """For each computer that split the dive into several logs, what the other
+    computers read while it wasn't logging. A Shearwater ends a dive after a
+    set time at the surface, so shallows or an air pocket can end it early."""
+    from statistics import median
+
+    out = []
+    for i, (_source, logs) in enumerate(groups):
+        if len(logs) < 2:
+            continue
+        breaks = [
+            (a["offset_s"] + a["samples"]["t_s"][-1], b["offset_s"] + b["samples"]["t_s"][0])
+            for a, b in zip(logs, logs[1:])
+            if a["samples"]["t_s"] and b["samples"]["t_s"]
+        ]
+        others = []
+        for j, (times, depths) in enumerate(series):
+            if j == i:
+                continue
+            during = [d for t, d in zip(times, depths) if d is not None and any(lo < t < hi for lo, hi in breaks)]
+            if during:
+                others.append({"computer": j, "median_m": round(median(during), 1), "max_m": round(max(during), 1)})
+        out.append({"computer": i, "breaks": len(breaks), "others": others})
+    return out
 
 
 def _columns_of(con: sqlite3.Connection, table: str) -> list[str]:

@@ -14,7 +14,7 @@ bottomtime collects the dives from your Shearwater and your Garmin Descent and
 shows them together. When you wore both computers on the same dive, it lines
 the two logs up on one timeline, so you can see what each one said at the same
 moment. It keeps every value your computers recorded, including GF99, the deco
-ceiling, and @+5, which Shearwater's own exports leave out. It can save all of
+ceiling, and @+5, which Shearwater's exports leave out. It can save all of
 it as spreadsheet files that you can open without bottomtime.
 
 ## Contents
@@ -227,6 +227,18 @@ from where each was worn, since two computers on different arms can sit at
 different depths. On a shallow dive, a fixed difference like that is a large
 percentage, which is why the sentence gives metres too.
 
+When the gap between the two computers kept moving around, more than a
+water setting can make it, a sentence says the computers were at different
+depths for parts of the dive. That happens when they're on different arms in
+a cave or a swim-through.
+
+When a Shearwater split the dive into several logs while the other computer
+stayed underwater, a sentence says so. A Shearwater ends a dive after a set
+time at the surface, its End Dive Delay, 60 seconds unless you change it, so
+shallows or an air pocket can end a dive early. Raising End Dive Delay in
+System Setup, Adv. Config, up to 600 seconds, keeps a dive like that in one
+log.
+
 When the computers showed different amounts of required stops, a sentence
 says so, and points out when they were set to different gradient factors.
 
@@ -251,6 +263,24 @@ GF99, surface GF, and ppO2 are ticked to start with:
   explains the calculation.
 - **ppO2.** The partial pressure of oxygen each computer reported.
 
+- **Tissues.** Every one of the Shearwater's 16 tissue compartments through
+  the dive, fastest at the top. A Shearwater writes the nitrogen and helium in
+  each compartment into its log about every four minutes, and bottomtime fills
+  the gaps with the same Bühlmann model. Blue means the compartment is still
+  taking on gas, and yellow through red means it's giving off gas, with red at
+  its M-value, the most the model allows. The small ticks under it mark the
+  computer's snapshots.
+
+  Beside the charts, bars show one moment, like the tissue screen on the
+  computer: each compartment's nitrogen and helium as a share of its M-value,
+  with marks for the water pressure around you and your gradient factor
+  limit. Move the pointer over the charts and the bars follow it. With the
+  pointer away, they show when your tissues came closest to their limit.
+  [How it works](how-it-works.md#tissues) explains where the numbers come
+  from.
+
+![The Tissues chart for a 101 m trimix dive: a heatmap of 16 compartments under the depth and GF99 charts, and beside them bars for each compartment at surfacing](images/tissues.png)
+
 The boxes under the legend add more charts: time to surface (with @+5
 dashed), next stop, NDL, CNS, temperature, and, from a Garmin, its N2 load and
 heart rate. Only what that dive's computers recorded is listed, and
@@ -265,7 +295,7 @@ dive in 10-second steps, or hold Shift for one-minute steps.
 
 When two computers logged the dive, the line under the charts says how they
 were lined up. No two dive computers' clocks agree. bottomtime starts from
-each computer's own clock, then slides one depth profile along the other until
+each computer's clock, then slides one depth profile along the other until
 they match best. "+190 s left over" means bottomtime had to slide one
 profile 190 seconds further than the two clocks said, once the time zone was
 accounted for. "Profile match 0.999" says how closely the two depth profiles

@@ -20,11 +20,11 @@ dives.db          one row per log, its samples, and every record it couldn't rea
    ▼
 dives             each dive, and each log's offset from the dive's start
    │
-   ├── verify     four checks against the manufacturers' own numbers
+   ├── verify     four checks against the manufacturers' numbers
    └── app, CLI   the dive list, the dive page, comparisons, surface GF, exports
 ```
 
-The numbers on this page come from my own logs: 144 from Shearwater computers
+The numbers on this page come from my logs: 144 from Shearwater computers
 and 341 from a Garmin Descent, as of October 2026.
 
 ## The archive
@@ -147,6 +147,14 @@ at each surface interval of a skills session, gets one card that says how many
 logs it had and adds up their runtimes. Its logs are drawn as one line that
 breaks where the computer wasn't logging.
 
+A Shearwater ends a dive once it has been at the surface for its End Dive
+Delay, 60 seconds unless you change it, so shallows or an air pocket can end a
+dive early. When another computer logged the same dive, bottomtime looks at
+what it read during each break. If it was still underwater, at a median of
+0.5 m or more, the dive's page says so and points to the setting. On my dives
+from 16 to 19 December 2025 the Perdix split single dives into two to six
+logs, and during those breaks the Descent was at a median of 0.7 to 1.1 m.
+
 The charts draw each computer's samples at their own times. The readout under
 the pointer shows, for each computer, its sample nearest that moment, as long
 as it's within 15 seconds or two sample intervals, whichever is longer. A
@@ -163,8 +171,8 @@ on the two brands reads 0.5% apart.
 
 For each dive two computers logged, bottomtime pairs their depth readings on
 the shared timeline, keeping pairs taken within 1.5 seconds of each other with
-both deeper than 5 m. Shallower than that, a fixed offset between two wrists
-dominates the percentage. It needs at least 20 pairs. The median ratio is the
+both deeper than 5 m. Shallower than that, a fixed offset between the two
+computers dominates the percentage. It needs at least 20 pairs. The median ratio is the
 depth gap, and the ratio of the two density settings is the part the settings
 explain. Both are on the dive's page, along with each computer's gradient
 factors, minutes of required stops, and CNS at the end.
@@ -174,9 +182,26 @@ In every one, the two computers were set to different water densities. On 20
 of them the Descent was on fresh water and the Perdix on EN13319, and those
 differ by a median of 1.7%. The settings explain the whole gap, to within 0.25
 points, on 22 of the 58. The median gap the settings don't explain is 0.32
-points. Two dives in December 2025 differ by 6%, with the Perdix a steady 0.6
-to 0.8 m shallower than the Descent at 9 to 15 m, which looks like where each
-computer was worn.
+points.
+
+A density setting changes every reading by the same share, so after dividing
+it out, the two computers should agree to within a few tens of centimetres all
+dive. bottomtime measures how much the gap still moves around: it takes out
+the median ratio, keeps readings where the depth was changing by 3 m a minute
+or less, because during an ascent a second of clock difference looks like a
+depth difference, and takes the middle half of what's left. On 52 of my 60
+two-computer dives that spread is 0.48 m or less. The other eight are 0.62 m
+or more, and the dive's page says the computers were at different depths for
+parts of the dive.
+
+The two dives on 25 December 2025, cave dives in Sulawesi, differ by 6%. The
+gap wasn't steady. With the median taken out it still moved over about 1 m
+across the middle half of the readings and reached 1.6 m. The Descent also
+logs absolute pressure, and comparing that with the Perdix's depth turned
+back into pressure gives the same answer without any density setting: on most
+dives the two agree within 0.02 bar, and on these two the difference moves by
+0.08 to 0.1 bar and reaches 0.27 bar, about 2.7 m. The computers were at
+different depths through parts of those dives, by more than an arm's length.
 
 ## Surface GF
 
@@ -202,10 +227,14 @@ records and doesn't read them. They hold 16 nitrogen and then 16 helium
 pressures, in bar, as little-endian floats, followed by nine more numbers I
 haven't identified and a timestamp. pnf's
 [SPEC.md](https://github.com/snehankekre/pnf/blob/main/SPEC.md#71-tissue-loading-snapshots-0x700x75)
-has the layout. Started from one snapshot, bottomtime's model lands within a
-median 0.01 bar of the computer's next snapshot four minutes later, 0.03 bar
-on 90% of 1,343 such stretches on my dives, and 0.19 bar at worst. So the
-tissue loading matches the computer's.
+has the layout. Started from one snapshot, bottomtime's model lands on the
+computer's next snapshot four minutes later with a median error of 0.0004 bar
+across all 32 compartments. Taking the worst compartment in each four-minute
+stretch, the median is 0.006 bar, 1,359 of the 1,372 stretches on my dives
+stay under 0.05 bar, and the worst is 0.19 bar. Every one of the 13 misses
+over 0.05 bar is in one of the two fastest compartments, whose half-times are
+two to eight minutes, where 10-second samples are coarsest. So the tissue
+loading matches the computer's.
 
 The same tissue state also gives a GF99 at the current depth, which the
 Shearwater logs, so every dive checks the calculation against the computer.
@@ -217,12 +246,35 @@ less. The dive page shows that gap for each dive in the chart's title.
 
 Since the tissues match, the gap comes from GF99 itself. The computer logs
 GF99 as a whole number, and the GF99 in a sample doesn't line up exactly with
-the depth in the same sample: the computer's own snapshot tissues agree best
-with the GF99 logged about 30 seconds after the snapshot's timestamp. The
-calculation also isn't Shearwater's own code, so treat it as a close estimate.
+the depth in the same sample: the snapshot tissues agree best with the GF99
+logged about 30 seconds after the snapshot's timestamp. The calculation also
+isn't Shearwater's code, so treat it as a close estimate.
 It's left out under VPM-B and DCIEM, which don't use gradient factors.
 bottomtime doesn't calculate it for Garmin logs yet. A Garmin doesn't log
 GF99, so there would be nothing to check the calculation against.
+
+## Tissues
+
+The Tissues chart shows all 16 compartments through the dive, for a
+Shearwater on gradient factors. Its values come from the snapshots the
+computer wrote, with the same ZHL-16C model filling the four minutes between
+them. The model starts again from each snapshot, so at every snapshot the
+chart shows exactly what the computer recorded, and the model never drifts
+for more than four minutes. Where it arrived at each snapshot is kept as a
+check, and the dive's page gives the median distance.
+
+The heatmap colours each compartment by its gradient: how far its inert gas
+pressure is from the water pressure around you, as a percentage of the way to
+its M-value, the same measure GF99 takes from the leading compartment. Below
+zero the compartment is still taking on gas, and it's drawn blue. Above zero
+it's giving off gas, from yellow through to red at its M-value.
+
+The bars beside the charts show one moment. Each compartment's nitrogen and
+helium are drawn as a share of its own M-value, the way a Shearwater draws its
+tissue screen, so the bars stay readable from 100 m to the surface. The marks
+on each bar are the water pressure around you and the limit your high
+gradient factor sets. With the pointer off the charts, the bars show the
+moment the leading compartment came closest to its M-value.
 
 ## Checking itself
 
